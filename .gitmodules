@@ -1,9 +1,8 @@
-[submodule "Documentation"]
-	path = Documentation
-	url = https://github.com/rohiniku/NuttX-nuttx-documentation.git
 [submodule "configs"]
 	path = configs
 	url = https://github.com/rohiniku/NuttX-nuttx-boards.git
+	branch = rohi_stm32f4discovery
 [submodule "arch"]
 	path = arch
 	url = https://github.com/rohiniku/NuttX-nuttx-arch.git
+	branch = rohi_stm32f4discovery
