@@ -97,7 +97,9 @@
 #define isinf(x)    (((float)(x) == INFINITY) || ((float)(x) == -INFINITY))
 #define isfinite(x) (!(isinf(x)) && ((float)x != NAN))
 #define fminf(_x,_y) ((float)(_x)<(float)(_y)?(float)(_x):(float)(_y))
+#define fmin(_x,_y) fminf(_x,_y)
 #define fmaxf(_x,_y) ((float)(_x)>(float)(_y)?(float)(_x):(float)(_y))
+#define fmax(_x,_y) fmaxf(_x,_y)
 
 /* Exponential and Logarithmic constants ************************************/
 
