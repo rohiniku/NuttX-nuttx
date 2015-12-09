@@ -89,13 +89,15 @@
 
 /* General Constants ********************************************************/
 
-#define INFINITY    (1.0/0.0)
-#define NAN         (0.0/0.0)
+#define INFINITY    (1.0f/0.0f)
+#define NAN         (0.0f/0.0f)
 #define HUGE_VAL    INFINITY
 
-#define isnan(x)    ((x) != (x))
-#define isinf(x)    (((x) == INFINITY) || ((x) == -INFINITY))
-#define isfinite(x) (!(isinf(x)) && (x != NAN))
+#define isnan(x)    ((float)(x) != (float)(x))
+#define isinf(x)    (((float)(x) == INFINITY) || ((float)(x) == -INFINITY))
+#define isfinite(x) (!(isinf(x)) && ((float)x != NAN))
+#define fminf(_x,_y) ((float)(_x)<(float)(_y)?(float)(_x):(float)(_y))
+#define fmaxf(_x,_y) ((float)(_x)>(float)(_y)?(float)(_x):(float)(_y))
 
 /* Exponential and Logarithmic constants ************************************/
 
