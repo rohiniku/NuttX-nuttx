@@ -46,7 +46,11 @@ _UCXXEXPORT void *operator new[](std::size_t numBytes) throw(std::bad_alloc)
 #ifdef CONFIG_UCLIBCXX_EXCEPTION
       std::__throw_bad_alloc();
 #else
+#if 0//DELDEL
       std::terminate();
+#else//DELDEL
+      ASSERT(0);
+#endif//DELDEL
 #endif
     }
 
