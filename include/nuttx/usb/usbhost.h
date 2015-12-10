@@ -685,7 +685,7 @@ typedef FAR void *usbhost_ep_t;
  * represented by struct usbhost_driver_s.  Connected to the HCD are one
  * or more hubs.  At a minimum, the root hub is always present. Each hub
  * has from 1 to 4 ports.
-
+ */
 /* Every class connects to the host controller driver (HCD) via a port on a
  * hub.  That hub may be an external hub or the internal, root hub.  The
  * root hub is managed by the HCD.  This structure describes that state of
