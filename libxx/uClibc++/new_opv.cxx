@@ -26,6 +26,7 @@
 #  include <func_exception>
 #else
 #  include <exception>
+#  include <cassert>
 #endif
 
 _UCXXEXPORT void *operator new[](std::size_t numBytes) throw(std::bad_alloc)
@@ -49,7 +50,7 @@ _UCXXEXPORT void *operator new[](std::size_t numBytes) throw(std::bad_alloc)
 #if 0//DELDEL
       std::terminate();
 #else//DELDEL
-      ASSERT(0);
+      assert(0);
 #endif//DELDEL
 #endif
     }
