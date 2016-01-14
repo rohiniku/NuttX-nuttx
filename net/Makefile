@@ -70,6 +70,7 @@ include udp/Make.defs
 include devif/Make.defs
 include loopback/Make.defs
 include route/Make.defs
+include procfs/Make.defs
 include utils/Make.defs
 endif
 

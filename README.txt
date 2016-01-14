@@ -1112,17 +1112,6 @@ Window Native Toolchain Issues
      is not a long as you might think because there is no dependency checking
      if you are using a native Windows toolchain.  That bring us to #3:
 
-  3. Dependencies are not made when using Windows versions of the GCC on a POSIX
-     platform (i.e., Cygwin).  This is because the dependencies are generated
-     using Windows paths which do not work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
-     If you are building natively on Windows, then no such conflict exists
-     and the best selection is:
-
-       MKDEP                = $(TOPDIR)/tools/mkdeps.exe
-
 General Pre-built Toolchain Issues
 
   To continue with the list of "Window Native Toolchain Issues" we can add
@@ -1256,6 +1245,8 @@ nuttx/
  |- configs/
  |   |- amber/
  |   |   `- README.txt
+ |   |- arduino-mega2560/
+ |   |   `- README.txt
  |   |- arduino-due/
  |   |   `- README.txt
  |   |- avr32dev1/
@@ -1308,6 +1299,8 @@ nuttx/
  |   |- hymini-stm32v/
  |   |   `- README.txt
  |   |- kwikstik-k40/
+ |   |   `- README.txt
+ |   |- launchxl-tms57004/
  |   |   `- README.txt
  |   |- lincoln60/
  |   |   `- README.txt

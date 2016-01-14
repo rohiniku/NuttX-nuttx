@@ -165,7 +165,7 @@ config BUILD_PROTECTED
 
 config BUILD_KERNEL
 	bool "NuttX kernel build"
-	depends on ARCH_USE_MMU && ARCH_ADDRENV && EXPERIMENTAL
+	depends on ARCH_USE_MMU && ARCH_ADDRENV
 	select LIB_SYSCALL
 	---help---
 		Builds NuttX as a separately compiled kernel.  No applications are
@@ -375,6 +375,12 @@ config ARCH_STDARG_H
 		toolchain's stdarg.h file, they can use this alternative by defining
 		ARCH_STDARG_H=y and providing. If ARCH_STDARG_H, is not defined, then
 		the stdarg.h header file will stay out-of-the-way in include/nuttx/.
+
+config ARCH_DEBUG_H
+	bool "debug.h"
+	default n
+	---help---
+		 The debug.h contains architecture dependent debugging primitives
 
 endmenu # Customize Header Files
 

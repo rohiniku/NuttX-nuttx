@@ -500,6 +500,11 @@ config SCHED_CPULOAD
 		The statistics collected in this could be used, for example in the
 		PROCFS file system to provide CPU load measurements when read.
 
+		Note that in tickless mode of operation (SCHED_TICKLESS) there is
+		no system timer interrupt and CPU load measurements will not be
+		possible unless you provide an alternative clock to driver the
+		sampling and select SCHED_CPULOAD_EXTCLK.
+
 if SCHED_CPULOAD
 
 config SCHED_CPULOAD_EXTCLK
@@ -775,6 +780,18 @@ config SCHED_ONEXIT_MAX
 
 endmenu # RTOS hooks
 
+config SIG_EVTHREAD
+	bool "Support SIGEV_THHREAD"
+	default n
+	depends on BUILD_FLAT && SCHED_WORKQUEUE
+	---help---
+		Built in support for the SIGEV_THREAD signal deliver method.
+
+		NOTE: The current implementation uses a work queue to notify the
+		client.  This, however, would only work in the FLAT build.  A
+		different mechanism would need to be development to support this
+		feature on the PROTECTED or KERNEL build.
+
 menu "Signal Numbers"
 	depends on !DISABLE_SIGNALS
 
@@ -852,7 +869,48 @@ config MQ_MAXMSGSIZE
 
 endmenu # POSIX Message Queue Options
 
-menu "Work Queue Support"
+menuconfig MODULE
+	bool "Enable loadable OS modules"
+	default n
+	---help---
+		Enable support for loadable OS modules.  Default: n
+
+if MODULE
+
+config MODULE_ALIGN_LOG2
+	int "Log2 Section Alignment"
+	default 2
+	---help---
+		Align all sections to this Log2 value:  0->1, 1->2, 2->4, etc.
+
+config MODULE_BUFFERSIZE
+	int "Module I/O Buffer Size"
+	default 128
+	---help---
+		This is an I/O buffer that is used to access the module file.
+		Variable length items will need to be read (such as symbol names).
+		This is really just this initial size of the buffer; it will be
+		reallocated as necessary to hold large symbol names).  Default: 128
+
+config MODULE_BUFFERINCR
+	int "Module I/O Buffer Realloc Increment"
+	default 32
+	---help---
+		This is an I/O buffer that is used to access the module file.
+		Variable length items will need to be read (such as symbol names).
+		This value specifies the size increment to use each time the
+		buffer is reallocated.  Default: 32
+
+config MODULE_DUMPBUFFER
+	bool "Dump module buffers"
+	default n
+	depends on DEBUG && DEBUG_VERBOSE
+	---help---
+		Dump various module buffers for debug purposes
+
+endif
+
+menu "Work queue support"
 
 config SCHED_WORKQUEUE
 #	bool "Enable worker thread"

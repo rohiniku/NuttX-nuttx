@@ -241,8 +241,8 @@ int pcf85263_rtc_initialize(FAR struct i2c_dev_s *i2c)
 {
   /* Remember the i2c device and claim that the RTC is enabled */
 
-  g_pcf85263.i2c  = i2c;
-  g_rtc_enabled = true;
+  g_pcf85263.i2c = i2c;
+  g_rtc_enabled  = true;
   return OK;
 }
 
@@ -408,6 +408,7 @@ int up_rtc_settime(FAR const struct timespec *tp)
   struct tm newtm;
   time_t newtime;
   uint8_t buffer[9];
+  uint8_t cmd;
   uint8_t seconds;
   int ret;
 
@@ -449,7 +450,7 @@ int up_rtc_settime(FAR const struct timespec *tp)
   rtc_dumptime(&tm, "New time");
 
   /* Construct the message */
-  /* Write starting with the seconds regiser */
+  /* Write starting with the 100ths of seconds register */
 
   buffer[0] = PCF85263_RTC_100TH_SECONDS;
 
@@ -498,9 +499,11 @@ int up_rtc_settime(FAR const struct timespec *tp)
 
   /* Read back the seconds register */
 
+  cmd           = PCF85263_RTC_SECONDS;
+
   msg[1].addr   = PCF85263_I2C_ADDRESS;
   msg[1].flags  = 0;
-  msg[1].buffer = buffer;
+  msg[1].buffer = &cmd;
   msg[1].length = 1;
 
   msg[2].addr   = PCF85263_I2C_ADDRESS;

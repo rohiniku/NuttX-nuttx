@@ -1,4 +1,4 @@
-NuttX TODO List (Last updated November 26, 2015)
+NuttX TODO List (Last updated January 13, 2016)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This file summarizes known NuttX bugs, limitations, inconsistencies with
@@ -14,15 +14,17 @@ nuttx/
   (3)  Signals (sched/signal, arch/)
   (2)  pthreads (sched/pthread)
   (0)  Message Queues (sched/mqueue)
+  (8)  Kernel/Protected Build
   (4)  C++ Support
   (6)  Binary loaders (binfmt/)
- (11)  Network (net/, drivers/net)
+ (13)  Network (net/, drivers/net)
   (4)  USB (drivers/usbdev, drivers/usbhost)
+  (1)  Other drivers (drivers/)
  (11)  Libraries (libc/, libm/)
  (11)  File system/Generic drivers (fs/, drivers/)
   (8)  Graphics subsystem (graphics/)
   (1)  Pascal add-on (pcode/)
-  (2)  Build system / Toolchains
+  (1)  Build system / Toolchains
   (3)  Linux/Cywgin simulation (arch/sim)
   (5)  ARM (arch/arm/)
 
@@ -339,9 +341,17 @@ o Signals (sched/signal, arch/)
                embedded system.
 
   Title:       SIGEV_THREAD
-  Description: sig_notify() logic does not support SIGEV_THREAD; structure
-               struct sigevent does not provide required members sigev_notify_function
-               or sigev_notify_attributes.
+  Description: Implementation of support for support for SIGEV_THREAD is available
+               only in the FLAT build mode because it uses the OS work queues to
+               perform the callback.  The alternative for the PROTECTED and KERNEL
+               builds would be to create pthreads in the user space to perform the
+               callbacks.  That is not a very attractive solution due to performance
+               issues.  It would also require some additional logic to specify the
+               TCB of the parent so that the pthread could be bound to the correct
+               group.
+
+               There is also some user-space logic in libc/aio/lio_listio.c.  That
+               logic could use the user-space work queue for the callbacks.
   Status:      Low, there are alternative designs.  However, these features
                are required by the POSIX standard.
   Priority:    Low for now
@@ -441,10 +451,6 @@ o Kernel/Protected Build
                -------- ----------------------------------------------
                mkfatfs  mkfatfs
                mkrd     ramdisk_register()
-               ps       sched_foreach()
-               ifup     netdev_foreach()
-               ifdown   netdev_foreach()
-               ifconfig netdev_foreach(), g_netstats
                ping     icmp_ping()
 
                The busybox mkfatfs does not involve any OS calls; it does
@@ -461,16 +467,9 @@ o Kernel/Protected Build
   Description: The NSH 'free' command only shows memory usage in the user
                heap only, not usage in the kernel heap.  I am thinking that
                kernel heap memory usage should be available in /proc/memory.
+               Better /proc/kmm
   Status:      Open
   Priority:    Medium/High
-
-  Title:       TELNETD PARTITIONING.
-  Description: Telnetd is implemented as a driver that resides in the apps/
-               directory.  In the kernel/protected build modes, the driver
-               logic must be moved into the kernel part of the build (nuttx/,
-               although the application level interfaces must stay in apps/).
-  Status:      Open
-  Priority:    Medium
 
   Title:       NxTERM PARTITIONING.
   Description: NxTerm is implemented (correctly) as a driver that resides
@@ -481,6 +480,16 @@ o Kernel/Protected Build
   Status:      Open
   Priority:    Medium
 
+  Title:       I2C TOOL PATITIONING
+  Description: The tool at apps/system/i2c makes direct calls into MCU level
+               I2C logic within the OS and, hence, violates the OS/application
+               interface.  An I2C character driver will need to be developed
+               to perform the I2C interactions within the OS; the I2C tools
+               will need to be modified to use that driver to perform the
+               I2C accesses.
+  Status:      Open
+  Priority:    Medium.  Until this change is made, the I2C tool will not be
+               availabel in protected or kernel builds.
   Title:       C++ CONSTRUCTORS HAVE TOO MANY PRIVILEGES (PROTECTED MODE)
   Description: When a C++ ELF module is loaded, its C++ constructors are called
                via sched/task_starthook.c logic.  This logic runs in protected mode.
@@ -999,6 +1008,42 @@ o Network (net/, drivers/net)
   Priority:    Low.  I don't know of any issues now, but I am sure that
                someone will encounter this in the future.
 
+  Title:       GLOBAL DNS ADDRESS
+  Description: Currently there is a single, global DNS server address.  This
+               address resides in user space (owned by libc/netdb) but is
+               accessed by network code in kernel space (net/procfs).  This
+               works in a FLAT build, not not in other build modules.
+
+               Things would be really weird in the kernel build:  There
+               would be a separate name server address and a separate netdb
+               DNS client in each process.  That can't be right.
+
+               The Linux kernel has no knowledge at all about DNS addresses.
+               DNS addresses are retained in /etc/resolv.conf in records
+               ike:
+
+                 nameserver <nameserver IP addresses>
+
+               The nameserver is associated with the device only through
+               the routing of the IP address.  And this is how there can
+               be multiple, global DNS addresses.
+
+               Conclusion: The logic in net/procfs needs to be re-designed
+               so that it does not use the DNS address.  The DNS address(es)
+               should to applied to the device status by logic in the
+               implementation of the NSH ifconfig command.  This would be,
+               unfortunately, a significant re-design since the formatting
+               is currently performed in net/procfs.
+  Status:      Open
+  Priority:    Low.  I doubt that there are any multiple NIC, multiple DNS
+               server configurations
+
+  Title:       MISSING netdb INTERFACES
+  Description: There is no implementation for many netdb interfaces such as
+               getaddrinfo(), freeaddrinfo(), getnameinfo(), etc.
+  Status:      Open
+  Priority:    Low
+
 o USB (drivers/usbdev, drivers/usbhost)
   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1316,8 +1361,8 @@ o File system / Generic drivers (fs/, drivers/)
 
   NOTE:  The NXFFS file system has its own TODO list at nuttx/fs/nxffs/README.txt
 
-  Title:       CHMOD() AND TRUNCATE()
-  Description: Implement chmod(), truncate().
+  Title:       CHMOD(), TRUNCATE(), AND FSTAT()
+  Description: Implement chmod(), truncate(), and fstat().
   Status:      Open
   Priority:    Low
 
@@ -1553,6 +1598,7 @@ o Graphics subsystem (graphics/)
   Status:      Open
   Priority:    Low, not a serious issue but worth noting.  There is no plan
                to change this behavior.
+
 o Pascal Add-On (pcode/)
   ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1576,16 +1622,6 @@ o Pascal Add-On (pcode/)
 o Build system
   ^^^^^^^^^^^^
 
-  Title:       WINDOWS DEPENDENCY GENERATION
-  Description: Dependency generation is currently disabled when a Windows native
-               toolchain is used in a POSIX-like environment (like Cygwin).  The
-               issue is that the Windows tool generates dependencies use Windows
-               path formatting and this fails with the dependency file (Make.dep)
-               is include).  Perhaps the only issue is that all of the Windows
-               dependencies needed to be quoted in the Make.dep files.
-  Status:      Open
-  Priority:    Low -- unless some dependency-related build issues is discovered.
-
   Title:       MAKE EXPORT LIMITATIONS
   Description: The top-level Makefile 'export' target that will bundle up all of the
                NuttX libraries, header files, and the startup object into an export-able
@@ -1598,6 +1634,28 @@ o Build system
                   some new argument, perhaps -u.
   Status:      Open
   Priority:    Low.
+
+o Other drivers (drivers/)
+  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+  Title:       I2C NOT THREAD SAFE
+  Description: Unlike the SPI interface, the I2C interface has no method to lock
+               the interface.  This is a problem for all non-atomic I2C operations
+               in a multi-tasking I2C environment:
+               - I2C_SETFREQUENCY:  Frequency setting can be overwritten by other
+                 I2C usage.
+               - I2C_SETADDRESS used with I2C_READ, I2C_WRITE, and I2C_WRITEREAD:
+                 Similarly, address can and will be changed by other I2C usage.
+               - I2C_TRANSFER:  This is the only interface that is properly self
+                 contained and protected from most mult-tasking issues.  But even
+                 this interface can suffer if there are differing frequency settings.
+  Status:      Open
+  Priority:    Medium-High.  The fix is easy but effects a lot of software.  There
+               are two ways to fix theses problems:  (1) Add a locking method such
+               as is provided with the SPI interface, or (2) make each interface
+               self-contained and atomic:  Remove the I2C_FREQUENCY and I2C_ADDRESS
+               methods; Add frequency to all interfaces and add the address to
+               I2C_READ, I2C_WRITE, and I2C_WRITEREAD.
 
 o Linux/Cywgin simulation (arch/sim)
   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1795,7 +1853,7 @@ o NuttShell (NSH) (apps/nshlib)
                show status for the single interface on the command line; it will
                still show status for all interfaces.
   Status:      Open
-  Priority:    Low (multiple network interfaces not fully supported yet anyway).
+  Priority:    Low
 
   Title:       ARP COMMAND
   Description: Add an ARP command so that we can see and modify the contents of

@@ -2741,7 +2741,7 @@
 	  the worker thread, disabling interrupts does not provide protected; Need to
 	  disable pre-emption.  (2) Fix handling of touch ID and (2) add some logic to
 	  prevent certain kinds of data overrun.
-	* include/nx/nxtk.h and graphics/nx/nxtk/nxtk_internal.h:  Move setting
+	* include/nx/nxtk.h and graphics/nx/nxtk/nxtk.h:  Move setting
 	  of configuration defaults from the internal header file to a place where
 	  other logic can use the defaults.
 	* graphics/nxtk/nxtk_events.c:  Fixed an important but in the logic that
@@ -4680,7 +4680,7 @@
 	* arch/arm/src/kl/kl_gpio.c and .h, configs/freedom-kl25z/src/freedom-kl25z.h,
 	  and configs/freedom-kl25z/src/kl_led.c:  Fixes LEDs on the Freedom KL25Z
 	  board (2013-5-6).
-	* arch/arm/src/kinetis/kinetis_pin.c and arch/arm/src/kinetis/kinetis_internal.h:
+	* arch/arm/src/kinetis/kinetis_pin.c and arch/arm/src/kinetis/kinetis.h:
 	  The Kinetis GPIO logic had some of the same issues as did the
 	  Kinetis L (2013-5-6).
 	* arch/arm/src/stm32/stm32_idle.c: Add an option to conditionally disable
@@ -9175,7 +9175,7 @@
 	  build framework and skeleton files for Tiva I2C driver.  Initial
 	  commit is just the STM32 I2C driver with name changes and STM32-
 	  specific logic removed (2014-12-9).
-	* fs/procfs/fs_procfs.c:  Add procfs write support.  From Ken Petit
+	* fs/procfs/fs_procfs.c:  Add procfs write support.  From Ken Pettit
 	  (2014-12-9).
 	* include/crc8.h, libc/misc/lib_crc8.c, and Make.defs: Add CRC8 support.
 	  From Ken Pettit (2014-12-9).
@@ -11004,7 +11004,7 @@
 	  sets the queued indication and the logic that does the actual queuing
 	  must be atomic (2015-09-20).
 
-7.13 2015-xx-xx Gregory Nutt <gnutt@nuttx.org>
+7.13 2015-12-05 Gregory Nutt <gnutt@nuttx.org>
 
 	* libc/stdlib/lib_bsearch.c and include/stdlib.h:  Add the bsearch()
 	  function from NetBSD (2015-10-02).
@@ -11020,7 +11020,7 @@
 	* stm32 F4:  Fix some TIM12 pin mappings.  From Max Kriegleder
 	  (2015-10-9).
 	* fs/tmpfs: TMPFS file system is code complete and bascially functional
-	  although it has not been heavilay tested (2015-10-9).
+	  although it has not been heavily tested (2015-10-9).
 	* drivers/input/button_upper.c and include/nuttx/input/buttons.h:  Add a
 	  driver to support application access to board buttons (2015-10-12).
 	* drivers/input/button_lower.c:  Add a generic lower half button driver.
@@ -11049,13 +11049,10 @@
 	* Many files: Standardize naming of the user LED interface functions.
 	  The new user LED interface functions are now prototyped in only in
 	  include/nuttx/board.h and have name like board_userled_* (2015-11-01).
-	* Rename ioexpander/ directories to discrete/.  This expands the
-	  namespace so that other discrete I/O drivers can reside there as
-	  well (2015-11-01).
-	* drivers/discrete/userled_upper.c and include/discrete/userled.h:  Add
+	* drivers/leds/usersled_upper.c and include/leds/usersled.h:  Add
 	  a generic character driver that may be used by applications to write
 	  to board LEDs (2015-11-01).
-	* drivers/discrete/userled_lower.c:  Add a generic lower-half user LED
+	* drivers/leds/usersled_lower.c:  Add a generic lower-half user LED
 	  driver that may be used by any board that supports the standard
 	  board user LED interfaces (2015-11-01).
 	* sched/clock: Fix error in clock_timespec_subtract().  Found by Lok
@@ -11097,7 +11094,7 @@
 	  include/nuttx/wireless/cc3000/security.h to include/nuttx/crypto/aes.h
 	  (2015-11-16).
 	* drivers/mtd/at24xx.c:  Add support for multiple AT24xx EEPROM parts,
-	  each with unique I2C addresses, but otherwise idential (2015-11-17).
+	  each with unique I2C addresses, but otherwise identical (2015-11-17).
 	* drivers/timers/ds3231.c:  Add support for the DS3231 I2C RTC.  Untested
 	  on the initial commit (2015-11-17).
 	* arch/arm/src/stm32/stm32_tim_lowerhalf.c:  Add a compatible lower-half
@@ -11106,11 +11103,11 @@
 	* drivers/sensors/ms58xx.c:  Fix some issues with initialization and with
 	  CRC calculation.  From Karim Keddam (2015-11-17).
 	* drivers/mtd/w25.c: Fix W25 FLASH driver page read/write logic. From
-	  Ken Petit (2015-11-18).
-	* drivers/mtd/smart.c: Fix a Smart wear-leveling bug. From Ken Petit
+	  Ken Pettit (2015-11-18).
+	* drivers/mtd/smart.c: Fix a Smart wear-leveling bug. From Ken Pettit
 	  (2015-11-18).
 	* arch/sim/src/up_spiflash.c:  Add support for W25 FLASH simulation.
-	  From Ken Petit (2015-11-18).
+	  From Ken Pettit (2015-11-18).
 	* configs/boardctl.h, Kconfig, include/sys/boardctl.h, and nuttx/board.h:
 	  Add a command to the boardctl() interface to obtain a board unique ID
 	  (2015-11-18).
@@ -11122,12 +11119,12 @@
 	* drivers/mtd/smart.c: Fixed SmartFS wear level error that occurs when
 	  the logical sector size is too small to save all wear level status
 	  bytes in a single sector.  Logical sectors 1 and 2 were simply not
-	  being allocated and then the read_sector and write_sector routinesi
-	  were failing.  From Ken Petit (2015-11-18).
+	  being allocated and then the read_sector and write_sector routines
+	  were failing.  From Ken Pettit (2015-11-18).
 	* drivers/timers/ds3231.c:  Untested support for DS1302 and DS3232.
 	  Also definitions for the DS3234, but that is an unsupported SPI RTC
 	  (2015-11-19).
-	* drivers/mtd/w25.c: Add support for byte write mode.  From Ken Peit
+	* drivers/mtd/w25.c: Add support for byte write mode.  From Ken Pettit
 	  (2015-11-20).
 	* drivers/timers/pcf85263.c and include/nuttx/times/pcf85263.h:  Add
 	  a driver for the NXP PCF85263 I2C RTC.  Untested on initial commit
@@ -11147,24 +11144,24 @@
 	  been backed out.  With these changes, the simulator builds without
 	* fs/hostfs and arch/sim/src:  Add a special file system for use with
 	  simulator that supports access to the host file system from the
-	  simulation.  From Ken Petit (2015-11-25).
+	  simulation.  From Ken Pettit (2015-11-25).
 	* libc/time/lib_strftime.c:  Add day-of-week support. (2015-11-25).
 	* drivers/lcd/ili9432.c:  Fixed errors in orientation. Portrait,
 	  RPortrait, and RLandscript should work correly now.  They were
 	  displayed mirrored.  From  Marco Krahl (2015-11-25).
 	* drivers/mtd/mtd/mtd_procfs/c and include/nuttx/mtd/mtd.h:  Add an
-	  interface to un-regiser an MTD procfs entry.  From Ken Petit
+	  interface to un-register an MTD procfs entry.  From Ken Pettit
 	  (2015-11-25).
-	* drivers/mtd/filemtd.c:  New new MTD conversion layer that will
+	* drivers/mtd/filemtd.c:  A new MTD conversion layer that will
 	  convert a regular file (or driver file) to an MTD device.  This is
 	  useful for testing on the simulation using the hostfs.  From Ken
-	  Petit (2015-11-25).
+	  Pettit (2015-11-25).
 	* drivers/loop:  Add a loop character device.  losetup() and
 	  loteardown() should not be called directory from applications.
 	  Rather, these functions are now available as IOCTL commands to the
 	  loop driver (2015-11-25).
 	* include/nuttx/net/netdev.h and several Ethernet drivers in arch/:
-	  Most network drivers to not support statistics.  Those that do only
+	  Most network drivers do not support statistics.  Those that do only
 	  support them when DEBUG is enabled.  Each driver collects an
 	  architecture specific set of statistics and there is no mechanism in
 	  place to view those statistics.  Thus, the driver feature was mostly
@@ -11173,3 +11170,136 @@
 	  where they can be accessed by network applications.  All Ethernet
 	  drivers that collect statistics have been adapted to use these common
 	  statistics (2015-11-26).
+	* net/net_procfs.c:  Add basic support for networking entries in the
+	  procfs (2015-11-27).
+	* mtd/filemtd.c and smart.c:  Add support for a /dev/smart loop device.
+	  From Ken Pettit (2015-11-28).
+	* sched/pthread/: CRITICAL BUGFIX: Logic was wiping out the indication
+	  that of the type of a pthread.  Hence, it could be confused as a
+	  task.  Found because this was causing a crash when /proc/nnn/cmdline
+	  was printed (2015-11-29).
+	* configs/same70-xplained/nsh:  The NSH configuration now seems fully
+	  functional:  serial console, LEDs, buttons, SDRAM, and HSMCI SD card
+	  (2015-11-30).
+	* configs/same70-xplained/netnsh:  Added and verified a network-enabled
+	  NSH configuration for the SAME70-Xplained board (2015-11-20).
+	* net/: Remove CONFIG_NET_PINGADDRCONF.  This was a uIP way of assigning
+	  IP addresses, but is not standard and not a appropriate feature in
+	  general (2015-12-01).
+	* fs/procfs:  The procfs file system can now be configured so that it
+	  supports a runtime registration of procfs entries with
+	  CONFIG_FS_PROCFS_REGISTER=y (2015-12-01).
+	* arch/arm/src/stm32/stm32_ccm_procfs.c: Is no longer a part of the
+	  'base' procfs entries and can now only be supported via run time
+	  registration with CONFIG_FS_PROCFS_REGISTER=y (2015-12-01).
+	* arch/arm/src/samv7/sam_tc.c:  Port the SAMA5 timer/counter driver
+	  to the SAMV7 (2015-12-02).
+	* arm/arm/src/samv7/sam_tickless.c:  Port the SAMA5/SAM4CM tickless
+	  logic to the SAMV7 (2015-12-02).
+	* fs/semaphore: Named semaphores:  Back out "fix" of 2015-10-22.  It was
+	  correct before.  The change of 2015-10-22 probably broke named
+	  semaphores (2015-12-02).
+	* arch/arm/src/samv7: Bring programmable clock logic from SAMA5 into
+	  SAMV7 (2015-12-03).
+	* arch/arm/src/samv7: Add PCK6 as an optional source for the timer/
+	  counter clock (2015-12-04).
+	* configs/samv7-xult/: If Tickless mode is selected then enable PCK6
+	  as a timer/counter clock source (2015-12-04).
+
+7.14 2015-xx-xx Gregory Nutt <gnutt@nuttx.org>
+
+	* arch/arm/src/samv7:  Port the TRNG driver from the SAMA5D3/4 to the
+	  SAMV7 (2015-12-06).
+	* arch/arm/src/samv7:  Port the WDT driver from the SAMA5D3/4 to the
+	  SAMV7 (s015-12-06).
+	* arch/arm/src/samv7:  Add an RSWDT driver (2015-12-06).
+	* drivers/net/telnet.c:  Move the Telnet driver from apps/netutils/telnetd
+	  to drivers/net.  It is a driver a belongs in the OS.  There are still
+	  some interface related issues, however (2015-12-07).
+	* configs/:  Update all configurations that use the Telnet daemon; those
+	  configurations now need to separately enable the Telnet drvier
+	  (2015-12-07).
+	* drivers/net/telnet.c:  Now works like the loop device.  A new interface
+	  called telnet_initialize() registers a telnet session "factory"
+	  device at /dev/telnet.  Via ioctl, the factory device can create
+	  instances of the telnet character devices at /dev/telnetN to support
+	  Telnet sessions (2015-12-07).
+	* arch/arm/src/samv7: In USBHS device driver, fix check if zero length
+	  packet is needed (2015-12-08).
+	* sched/pthread/: CRITICAL BUGFIX: Logic was wiping out the indication
+	  that of the type of a pthread.  Hence, it could be confused as a
+	  task.  Same problem as fixed on 2015-11-29, but in different location
+	  (2015-12-09).
+	* sched/module:  Add support for kernel modules.  Initial commit is
+	  just the ELF module support with name changes (2015-12-10).
+	* configs/samv71-xult/module:  Add configuration for testing OS
+	  modules (2015-12-12).
+	* sched/module:  Add an implementation of rmmod() (2015-12-12).
+	* sched/module and fs/procfs:  Add some basic module procfs support
+	  (2015-12-12),
+	* arch/arm/src/armv7-r:  Add basic architecture support for the ARMv7-R
+	  processor family (2015-12-13).
+	* drivers/led:  Adds a driver for the PCA9635PW I2C LED driver IC which
+	  can be used to control the intensity of up to 16 LEDs.  From Alexander
+	  Entinger (2015-12-15).
+	* configs/launchxl-tms57004:  Add basic board support for TI LaunchXL-
+	  TMS57004.  Not much to see there yet (2015-12-15).
+	* waitpid:  CRITICAL BUGFIX.  Add a reference count to prevent waitpid
+	  from using stale memory released by the waited-for task group
+	  (2015-12-22).
+	* sys/time.h: Add timeradd(), timersub(), timerclear(), timerisset(),
+	  and timercmp() as macros. These are non-POSIX interfaces, but
+	  included in most BSD deriviatives, included Linux.  From Manuel Stühn
+	  (2015-12-23).
+	* arch/arm/src/stm32:  Add timer input capture driver.  From Pierre-Noel
+	  Bouteville (2015-12-24).
+	* arch/avr:  Add support for the Atmega2560.  From Dimitry Kloper
+	  (2015-12-19).
+	* configs/arduino-mega2560: Add support for the Arduino-Mega2560.  From
+	  Dimitry Koper (2015-12-29).
+	* sched/signal, sched/mqueue, sched/timer, include/signal.h,
+	  include/nuttx/signal, fs/aio, libc/aio, and probably other
+	  directories:  Add support for the SIGEV_THREAD notification method in
+	  struct sigevent.  This initial implementation will only work in the
+	  FLAT build.  See the top-level TODO file for additional details
+	  (2015-12-30).
+	* include/nuttx/compiler.h, include/nuttx/streams.h include/stdio.h
+	  include/syslog.h libc/stdio/, and libc/syslog: ntroduce support for
+	  Atmel toolchain in-flash strings.  Atmel toolchain AVR compiler
+	  provides a transparent in-flash object support using __flash and
+	  __memx symbols. The former indicates to compiler that this is a flash-
+	  based object.  The later used with pointer indicates that the referenced
+	  object may reside either in flash or in RAM. The compiler automatically
+	  makes 32-bit pointer with flag indicating whether referenced object is
+	  in flash or RAM and generates code to access either in run-time. Thus,
+	  any function that accepts __memx object can transparently work with RAM
+	  and flash objects.
+	  For platforms with a Harvard architecture and a very small RAM like AVR
+	  this allows to move all constant strings used in trace messages to flash
+	  in the instruction address space, releasing resources for other things.
+	  This change introduces IOBJ and IPTR type qualifiers.  The 'I' indicates
+	  that the object may lie in instruction space on a Harvard architecture
+	  machine. For platforms that do not have __flash and __memx or similar
+	  symbols IOBJ and IPTR are empty, making the types equivalent to, for
+	  example, 'const char' and 'const char*'.  For Atmel compiler these will
+	  become 'const __flash char' and 'const __memx char*'.  All printf()
+	  functions and syslog() functions are changed so that the qualifier is
+	  used with the format parameter.  From Dimitry Kloper (2016-01-05).
+	* drivers/net/tun.c:  Fix a compile time error in the TUN driver.  From
+	  Vladimir Komendantskiy (2016-01-05).
+	* Kconfig and include/debug.h:  Add configuration to support an
+	  architecture-specific debug.h header file. From Dimitri Kloper
+	  (2016-01-09).
+	* arch/avr/include/debug.h: Add an AVR-specific header file used when
+	  the AVR MEMX pointer is used.  From Dimitri Kloper (2016-01-09).
+	* tools/cnvwindeps.c:  Add a tool that will convert paths in
+	  dependencies generated by a Windows compiler so that they can be
+	  used with the Cygwin make (2016-01-09).
+	* tools/mkwindeps.sh: A script that coordinates us ov cnvwindeps.exe
+	  (2016-01-09).
+	* tools/mkdeps.c:  Deleted mkdeps.sh and mkdeps.bat.  The mkdeps
+	  executable generated from mkdeps.c is now that the only supported
+	  way to make dependencies (2016-01-09).
+	* tools/mkdeps.c:  Extended/fixed support for --winpath option.
+	  Dependencies now work under Cygwin with a native Windows toolchain
+	  (2016-01-10).

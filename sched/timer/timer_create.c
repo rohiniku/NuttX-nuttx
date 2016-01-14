@@ -1,7 +1,7 @@
 /********************************************************************************
  * sched/timer/timer_create.c
  *
- *   Copyright (C) 2007-2009, 2011, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -76,7 +76,7 @@
  *
  ********************************************************************************/
 
-static struct posix_timer_s *timer_allocate(void)
+static FAR struct posix_timer_s *timer_allocate(void)
 {
   FAR struct posix_timer_s *ret;
   irqstate_t flags;
@@ -177,8 +177,8 @@ static struct posix_timer_s *timer_allocate(void)
 
 int timer_create(clockid_t clockid, FAR struct sigevent *evp, FAR timer_t *timerid)
 {
-  struct posix_timer_s *ret;
-  WDOG_ID               wdog;
+  FAR struct posix_timer_s *ret;
+  WDOG_ID wdog;
 
   /* Sanity checks.  Also, we support only CLOCK_REALTIME */
 
@@ -215,17 +215,11 @@ int timer_create(clockid_t clockid, FAR struct sigevent *evp, FAR timer_t *timer
 
   if (evp)
     {
-      ret->pt_signo           = evp->sigev_signo;
-#ifdef CONFIG_CAN_PASS_STRUCTS
-      ret->pt_value           = evp->sigev_value;
-#else
-      ret->pt_value.sival_ptr = evp->sigev_value.sival_ptr;
-#endif
+      memcpy(&ret->pt_event, evp, sizeof(struct sigevent));
     }
   else
     {
-      ret->pt_signo           = SIGALRM;
-      ret->pt_value.sival_ptr = ret;
+      memset(&ret->pt_event, 0, sizeof(struct sigevent));
     }
 
   /* Return the timer */
