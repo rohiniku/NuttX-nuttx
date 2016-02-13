@@ -81,7 +81,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define VNET_WDDELAY   (1*CLK_TCK)
-#define VNET_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -518,11 +517,12 @@ static void vnet_polltimer(int argc, uint32_t arg, ...)
    * progress, we will missing TCP time state updates?
    */
 
-  (void)devif_timer(&vnet->sk_dev, vnet_txpoll, VNET_POLLHSEC);
+  (void)devif_timer(&vnet->sk_dev, vnet_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1, arg);
+  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -554,7 +554,8 @@ static int vnet_ifup(struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1, (uint32_t)vnet);
+  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1,
+                 (wdparm_t)vnet);
 
   vnet->sk_bifup = true;
   return OK;

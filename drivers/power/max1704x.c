@@ -2,7 +2,7 @@
  * drivers/power/max1704x.c
  * Lower half driver for MAX1704x battery fuel gauge
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/power/battery_gauge.h>
 
 /* This driver requires:
@@ -178,13 +178,13 @@ struct max1704x_dev_s
   /* The common part of the battery driver visible to the upper-half driver */
 
   FAR const struct battery_gauge_operations_s *ops; /* Battery operations */
-  sem_t batsem;              /* Enforce mutually exclusive access */
+  sem_t batsem;                 /* Enforce mutually exclusive access */
 
   /* Data fields specific to the lower half MAX1704x driver follow */
 
-  FAR struct i2c_dev_s *i2c; /* I2C interface */
-  uint8_t addr;              /* I2C address */
-  uint32_t frequency;        /* I2C frequency */
+  FAR struct i2c_master_s *i2c; /* I2C interface */
+  uint8_t addr;                 /* I2C address */
+  uint32_t frequency;           /* I2C frequency */
 };
 
 /****************************************************************************
@@ -243,28 +243,31 @@ static const struct battery_gauge_operations_s g_max1704xops =
 static int max1704x_getreg16(FAR struct max1704x_dev_s *priv, uint8_t regaddr,
                              FAR uint16_t *regval)
 {
+  struct i2c_config_s config;
   uint8_t buffer[2];
   int ret;
 
-  /* Set the I2C address and address size */
+  /* Set up the configuration and perform the write-read operation */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
+  config.frequency = priv->frequency;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
 
   /* Write the register address */
 
-  ret = I2C_WRITE(priv->i2c, &regaddr, 1);
+  ret = i2c_write(priv->i2c, &config, &regaddr, 1);
   if (ret < 0)
     {
-      batdbg("I2C_WRITE failed: %d\n", ret);
+      batdbg("i2c_write failed: %d\n", ret);
       return ret;
     }
 
   /* Restart and read 16-bits from the register */
 
-  ret = I2C_READ(priv->i2c, buffer, 2);
+  ret = i2c_read(priv->i2c, &config, buffer, 2);
   if (ret < 0)
     {
-      batdbg("I2C_READ failed: %d\n", ret);
+      batdbg("i2c_read failed: %d\n", ret);
       return ret;
     }
 
@@ -286,6 +289,7 @@ static int max1704x_getreg16(FAR struct max1704x_dev_s *priv, uint8_t regaddr,
 static int max1704x_putreg16(FAR struct max1704x_dev_s *priv, uint8_t regaddr,
                              uint16_t regval)
 {
+  struct i2c_config_s config;
   uint8_t buffer[3];
 
   batdbg("addr: %02x regval: %08x\n", regaddr, regval);
@@ -296,13 +300,15 @@ static int max1704x_putreg16(FAR struct max1704x_dev_s *priv, uint8_t regaddr,
   buffer[1] = (uint8_t)(regval >> 8);
   buffer[2] = (uint8_t)(regval & 0xff);
 
-  /* Set the I2C address and address size */
+  /* Set up the configuration and perform the write-read operation */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
+  config.frequency = priv->frequency;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
 
   /* Write the register address followed by the data (no RESTART) */
 
-  return I2C_WRITE(priv->i2c, buffer, 3);
+  return i2c_write(priv->i2c, &config, buffer, 3);
 }
 
 /****************************************************************************
@@ -520,7 +526,7 @@ static int max1704x_capacity(struct battery_gauge_dev_s *dev, b16_t *value)
  *
  ****************************************************************************/
 
-FAR struct battery_gauge_dev_s *max1704x_initialize(FAR struct i2c_dev_s *i2c,
+FAR struct battery_gauge_dev_s *max1704x_initialize(FAR struct i2c_master_s *i2c,
                                                     uint8_t addr,
                                                     uint32_t frequency)
 {
@@ -541,10 +547,6 @@ FAR struct battery_gauge_dev_s *max1704x_initialize(FAR struct i2c_dev_s *i2c,
       priv->i2c       = i2c;
       priv->addr      = addr;
       priv->frequency = frequency;
-
-      /* Set the I2C frequency (ignoring the returned, actual frequency) */
-
-      (void)I2C_SETFREQUENCY(i2c, priv->frequency);
 
       /* Reset the MAX1704x (mostly just to make sure that we can talk to it) */
 

@@ -65,7 +65,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/wqueue.h>
 
 #include <nuttx/input/touchscreen.h>
@@ -165,7 +165,7 @@ struct tsc2007_dev_s
   sem_t waitsem;                       /* Used to wait for the availability of data */
 
   FAR struct tsc2007_config_s *config; /* Board configuration data */
-  FAR struct i2c_dev_s *i2c;           /* Saved I2C driver instance */
+  FAR struct i2c_master_s *i2c;        /* Saved I2C driver instance */
   struct work_s work;                  /* Supports the interrupt handling "bottom half" */
   struct tsc2007_sample_s sample;      /* Last sampled touch point data */
 
@@ -430,12 +430,13 @@ static int tsc2007_activate(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    * activation command (ACKed).
    */
 
-   data = TSC2007_SETUP;
+   data          = TSC2007_SETUP;
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &data;                 /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &data;                     /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    /* Ignore errors from the setup command (because it is not ACKed) */
 
@@ -443,12 +444,13 @@ static int tsc2007_activate(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
 
    /* Now activate the A/D converter */
 
-   data = cmd;
+   data          = cmd;
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &data;                 /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &data;                     /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
@@ -483,10 +485,11 @@ static int tsc2007_transfer(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    *  STOP condition...
    */
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &cmd;                  /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &cmd;                      /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
@@ -527,10 +530,11 @@ static int tsc2007_transfer(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    *  data byte has been received...
    */
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = I2C_M_READ;            /* Read transaction, beginning with START */
-   msg.buffer = data12;                /* Transfer to this address */
-   msg.length = 2;                     /* Read two bytes following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = I2C_M_READ;                /* Read transaction, beginning with START */
+   msg.buffer    = data12;                    /* Transfer to this address */
+   msg.length    = 2;                         /* Read two bytes following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
@@ -1068,7 +1072,7 @@ static int tsc2007_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         {
           FAR uint32_t *ptr = (FAR uint32_t *)((uintptr_t)arg);
           DEBUGASSERT(priv->config != NULL && ptr != NULL);
-          priv->config->frequency = I2C_SETFREQUENCY(priv->i2c, *ptr);
+          priv->config->frequency = *ptr;
         }
         break;
 
@@ -1210,7 +1214,7 @@ errout:
  *
  ****************************************************************************/
 
-int tsc2007_register(FAR struct i2c_dev_s *dev,
+int tsc2007_register(FAR struct i2c_master_s *dev,
                      FAR struct tsc2007_config_s *config, int minor)
 {
   FAR struct tsc2007_dev_s *priv;
@@ -1249,19 +1253,6 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
   priv->config = config;          /* Save the board configuration */
   sem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
   sem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
-
-  /* Set the I2C frequency (saving the actual frequency) */
-
-  config->frequency = I2C_SETFREQUENCY(dev, config->frequency);
-
-  /* Set the I2C address and address size */
-
-  ret = I2C_SETADDRESS(dev, config->address, 7);
-  if (ret < 0)
-    {
-      idbg("I2C_SETADDRESS failed: %d\n", ret);
-      goto errout_with_priv;
-    }
 
   /* Make sure that interrupts are disabled */
 

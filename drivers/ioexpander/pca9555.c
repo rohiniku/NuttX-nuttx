@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/ioexpander/pca9555.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2016 Gregory Nutt. All rights reserved.
  *   Author: Sebastien Lorquet <sebastien@lorquet.fr>
  *
  * References:
@@ -43,12 +43,13 @@
 
 #include <nuttx/config.h>
 
+#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
 
 #include <nuttx/irq.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/ioexpander/ioexpander.h>
 
@@ -64,34 +65,32 @@
 #  warning I2C support is required (CONFIG_I2C)
 #endif
 
-#ifndef CONFIG_I2C_WRITEREAD
-#  warning Support of the I2C writeread() method is required (CONFIG_I2C_WRITEREAD)
-#endif
-
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static int pca9555_direction   (FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, int dir);
-static int pca9555_option      (FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, int opt, void *val);
-static int pca9555_write       (FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, bool value);
-static int pca9555_readpin     (FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value);
-static int pca9555_readbuf     (FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value);
+static inline int pca9555_write(FAR struct pca9555_dev_s *pca,
+             FAR const uint8_t *wbuffer, int wbuflen);
+static inline int pca9555_writeread(FAR struct pca9555_dev_s *pca,
+             FAR const uint8_t *wbuffer, int wbuflen, FAR uint8_t *rbuffer,
+             int rbuflen);
+static int pca9555_direction(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+             int dir);
+static int pca9555_option(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+             int opt, void *val);
+static int pca9555_writepin(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+             bool value);
+static int pca9555_readpin(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+             FAR bool *value);
+static int pca9555_readbuf(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+             FAR bool *value);
 #ifdef CONFIG_IOEXPANDER_MULTIPIN
-static int pca9555_multiwrite  (FAR struct ioexpander_dev_s *dev,
-                                FAR uint8_t *pins, FAR bool *values,
-                                int count);
+static int pca9555_multiwritepin(FAR struct ioexpander_dev_s *dev,
+             FAR uint8_t *pins, FAR bool *values, int count);
 static int pca9555_multireadpin(FAR struct ioexpander_dev_s *dev,
-                                FAR uint8_t *pins, FAR bool *values,
-                                int count);
+             FAR uint8_t *pins, FAR bool *values, int count);
 static int pca9555_multireadbuf(FAR struct ioexpander_dev_s *dev,
-                                FAR uint8_t *pins, FAR bool *values,
-                                int count);
+             FAR uint8_t *pins, FAR bool *values, int count);
 #endif
 
 /****************************************************************************
@@ -115,11 +114,11 @@ static const struct ioexpander_ops_s g_pca9555_ops =
 {
   pca9555_direction,
   pca9555_option,
-  pca9555_write,
+  pca9555_writepin,
   pca9555_readpin,
   pca9555_readbuf,
 #ifdef CONFIG_IOEXPANDER_MULTIPIN
-  pca9555_multiwrite,
+  pca9555_multiwritepin,
   pca9555_multireadpin,
   pca9555_multireadbuf,
 #endif
@@ -130,6 +129,75 @@ static const struct ioexpander_ops_s g_pca9555_ops =
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: pca9555_lock
+ *
+ * Description:
+ *   Get exclusive access to the PCA9555
+ *
+ ****************************************************************************/
+
+static void pca9555_lock(FAR struct pca9555_dev_s *pca)
+{
+  while (sem_wait(&pca->exclsem) < 0)
+    {
+      /* EINTR is the only expected error from sem_wait() */
+
+      DEBUGASSERT(errno == EINTR);
+    }
+}
+
+#define pca9555_unlock(p) sem_post(&(p)->exclsem)
+
+/****************************************************************************
+ * Name: pca9555_write
+ *
+ * Description:
+ *   Write to the I2C device.
+ *
+ ****************************************************************************/
+
+static inline int pca9555_write(FAR struct pca9555_dev_s *pca,
+                                FAR const uint8_t *wbuffer, int wbuflen)
+{
+  struct i2c_msg_s msg;
+
+  /* Setup for the transfer */
+
+  msg.frequency = pca->config->frequency;
+  msg.addr      = pca->config->address;
+  msg.flags     = 0;
+  msg.buffer    = (FAR uint8_t *)wbuffer;  /* Override const */
+  msg.length    = wbuflen;
+
+  /* Then perform the transfer. */
+
+  return I2C_TRANSFER(pca->i2c, &msg, 1);
+}
+
+/****************************************************************************
+ * Name: pca9555_writeread
+ *
+ * Description:
+ *   Write to then read from the I2C device.
+ *
+ ****************************************************************************/
+
+static inline int pca9555_writeread(FAR struct pca9555_dev_s *pca,
+                                    FAR const uint8_t *wbuffer, int wbuflen,
+                                    FAR uint8_t *rbuffer, int rbuflen)
+{
+  struct i2c_config_s config;
+
+  /* Set up the configuration and perform the write-read operation */
+
+  config.frequency = pca->config->frequency;
+  config.address   = pca->config->address;
+  config.addrlen   = 7;
+
+  return i2c_writeread(pca->i2c, &config, wbuffer, wbuflen, rbuffer, rbuflen);
+}
+
+/****************************************************************************
  * Name: pca9555_setbit
  *
  * Description:
@@ -137,12 +205,11 @@ static const struct ioexpander_ops_s g_pca9555_ops =
  *
  ****************************************************************************/
 
-static int pca9555_setbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
+static int pca9555_setbit(FAR struct pca9555_dev_s *pca, uint8_t addr,
                           uint8_t pin, int bitval)
 {
-  int ret;
   uint8_t buf[2];
-  buf[0] = addr;
+  int ret;
 
   if (pin > 15)
     {
@@ -150,11 +217,13 @@ static int pca9555_setbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
     }
   else if (pin > 7)
     {
-      addr += 1;
+      addr++;
       pin  -= 8;
     }
 
-  ret = I2C_WRITEREAD(i2c, &addr, 1, &buf[1], 1);
+  buf[0] = addr;
+
+  ret = pca9555_writeread(pca, &buf[0], 1, &buf[1], 1);
   if (ret < 0)
     {
       return ret;
@@ -169,7 +238,7 @@ static int pca9555_setbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
       buf[1] &= ~(1 << pin);
     }
 
-  return I2C_WRITE(i2c, buf, 2);
+  return pca9555_write(pca, buf, 2);
 }
 
 /****************************************************************************
@@ -180,7 +249,7 @@ static int pca9555_setbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
  *
  ****************************************************************************/
 
-static int pca9555_getbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
+static int pca9555_getbit(FAR struct pca9555_dev_s *pca, uint8_t addr,
                           uint8_t pin, FAR bool *val)
 {
   uint8_t buf;
@@ -196,7 +265,7 @@ static int pca9555_getbit(FAR struct i2c_dev_s *i2c, uint8_t addr,
       pin  -= 8;
     }
 
-  ret = I2C_WRITEREAD(i2c, &addr, 1, &buf, 1);
+  ret = pca9555_writeread(pca, &addr, 1, &buf, 1);
   if (ret < 0)
     {
       return ret;
@@ -218,8 +287,15 @@ static int pca9555_direction(FAR struct ioexpander_dev_s *dev, uint8_t pin,
                              int direction)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_setbit(pca->i2c, PCA9555_REG_CONFIG, pin,
-                        (direction == IOEXPANDER_DIRECTION_IN));
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_setbit(pca, PCA9555_REG_CONFIG, pin,
+                       (direction == IOEXPANDER_DIRECTION_IN));
+  pca9555_unlock(pca);
+  return ret;
 }
 
 /****************************************************************************
@@ -235,28 +311,40 @@ static int pca9555_option(FAR struct ioexpander_dev_s *dev, uint8_t pin,
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
   int ival = (int)val;
+  int ret = -EINVAL;
 
   if (opt == IOEXPANDER_OPTION_INVERT)
     {
-      return pca9555_setbit(pca->i2c, PCA9555_REG_POLINV, pin, ival);
+      /* Get exclusive access to the PCA555 */
+
+      pca9555_lock(pca);
+      ret = pca9555_setbit(pca, PCA9555_REG_POLINV, pin, ival);
+      pca9555_unlock(pca);
     }
 
-  return -EINVAL;
+  return ret;
 }
 
 /****************************************************************************
- * Name: pca9555_write
+ * Name: pca9555_writepin
  *
  * Description:
  *  See include/nuttx/ioexpander/ioexpander.h
  *
  ****************************************************************************/
 
-static int pca9555_write(FAR struct ioexpander_dev_s *dev, uint8_t pin,
-                         bool value)
+static int pca9555_writepin(FAR struct ioexpander_dev_s *dev, uint8_t pin,
+                            bool value)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_setbit(pca->i2c, PCA9555_REG_OUTPUT, pin, value);
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_setbit(pca, PCA9555_REG_OUTPUT, pin, value);
+  pca9555_unlock(pca);
+  return ret;
 }
 
 /****************************************************************************
@@ -271,7 +359,14 @@ static int pca9555_readpin(FAR struct ioexpander_dev_s *dev, uint8_t pin,
                            FAR bool *value)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_getbit(pca->i2c, PCA9555_REG_INPUT, pin, value);
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_getbit(pca, PCA9555_REG_INPUT, pin, value);
+  pca9555_unlock(pca);
+  return ret;
 }
 
 /****************************************************************************
@@ -286,7 +381,14 @@ static int pca9555_readbuf(FAR struct ioexpander_dev_s *dev, uint8_t pin,
                            FAR bool *value)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_getbit(pca->i2c, PCA9555_REG_OUTPUT, pin, value);
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_getbit(pca, PCA9555_REG_OUTPUT, pin, value);
+  pca9555_unlock(pca);
+  return ret;
 }
 
 #ifdef CONFIG_IOEXPANDER_MULTIPIN
@@ -299,7 +401,7 @@ static int pca9555_readbuf(FAR struct ioexpander_dev_s *dev, uint8_t pin,
  *
  ****************************************************************************/
 
-static int pca9555_getmultibits(FAR struct i2c_dev_s *i2c, uint8_t addr,
+static int pca9555_getmultibits(FAR struct pca9555_dev_s *pca, uint8_t addr,
                                 FAR uint8_t *pins, FAR bool *values,
                                 int count)
 {
@@ -309,8 +411,7 @@ static int pca9555_getmultibits(FAR struct i2c_dev_s *i2c, uint8_t addr,
   int index;
   int pin;
 
-  ret = I2C_WRITEREAD(i2c, &addr, 1, buf, 2);
-
+  ret = pca9555_writeread(pca, &addr, 1, buf, 2);
   if (ret < 0)
     {
       return ret;
@@ -339,16 +440,16 @@ static int pca9555_getmultibits(FAR struct i2c_dev_s *i2c, uint8_t addr,
 }
 
 /****************************************************************************
- * Name: pca9555_multiwrite
+ * Name: pca9555_multiwritepin
  *
  * Description:
  *  See include/nuttx/ioexpander/ioexpander.h
  *
  ****************************************************************************/
 
-static int pca9555_multiwrite(FAR struct ioexpander_dev_s *dev,
-                              FAR uint8_t *pins, FAR bool *values,
-                              int count)
+static int pca9555_multiwritepin(FAR struct ioexpander_dev_s *dev,
+                                 FAR uint8_t *pins, FAR bool *values,
+                                 int count)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
   uint8_t addr = PCA9555_REG_OUTPUT;
@@ -358,13 +459,21 @@ static int pca9555_multiwrite(FAR struct ioexpander_dev_s *dev,
   int index;
   int pin;
 
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+
   /* Start by reading both registers, whatever the pins to change. We could
    * attempt to read one port only if all pins were on the same port, but
    * this would not save much. */
 
-  ret = I2C_WRITEREAD(pca->i2c, &addr, 1, &buf[1], 2);
+  ret = pca9555_writeread(pca, &addr, 1, &buf[1], 2);
   if (ret < 0)
     {
+
+      pca9555_unlock(pca);
       return ret;
     }
 
@@ -376,6 +485,7 @@ static int pca9555_multiwrite(FAR struct ioexpander_dev_s *dev,
       pin = pins[i];
       if (pin > 15)
         {
+          pca9555_unlock(pca);
           return -ENXIO;
         }
       else if(pin > 7)
@@ -397,7 +507,10 @@ static int pca9555_multiwrite(FAR struct ioexpander_dev_s *dev,
   /* Now write back the new pins states */
 
   buf[0] = addr;
-  return I2C_WRITE(pca->i2c, buf, 3);
+  ret = pca9555_write(pca, buf, 3);
+
+  pca9555_unlock(pca);
+  return ret;
 }
 
 /****************************************************************************
@@ -413,8 +526,15 @@ static int pca9555_multireadpin(FAR struct ioexpander_dev_s *dev,
                                 int count)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_getmultibits(pca->i2c, PCA9555_REG_INPUT,
-                              pins, values, count);
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_getmultibits(pca, PCA9555_REG_INPUT,
+                             pins, values, count);
+  pca9555_unlock(pca);
+  return ret;
 }
 
 /****************************************************************************
@@ -430,8 +550,15 @@ static int pca9555_multireadbuf(FAR struct ioexpander_dev_s *dev,
                                 int count)
 {
   FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s *)dev;
-  return pca9555_getmultibits(pca->i2c, PCA9555_REG_OUTPUT,
-                              pins, values, count);
+  int ret;
+
+  /* Get exclusive access to the PCA555 */
+
+  pca9555_lock(pca);
+  ret = pca9555_getmultibits(pca, PCA9555_REG_OUTPUT,
+                             pins, values, count);
+  pca9555_unlock(pca);
+  return ret;
 }
 
 #endif
@@ -456,7 +583,7 @@ static void pca9555_irqworker(void *arg)
 
   /* Read inputs */
 
-  ret = I2C_WRITEREAD(pca->i2c, &addr, 1, buf, 2);
+  ret = pca9555_writeread(pca, &addr, 1, buf, 2);
   if (ret != OK)
     {
       return;
@@ -501,7 +628,7 @@ static int pca9555_interrupt(int irq, FAR void *context)
 {
 #ifdef CONFIG_PCA9555_MULTIPLE
   /* To support multiple devices,
-   * retrieve the priv structure using the irq number.
+   * retrieve the pca structure using the irq number.
    */
 
 #  warning Missing logic
@@ -544,7 +671,7 @@ static int pca9555_interrupt(int irq, FAR void *context)
  *
  ****************************************************************************/
 
-FAR struct ioexpander_dev_s *pca9555_initialize(FAR struct i2c_dev_s *i2cdev,
+FAR struct ioexpander_dev_s *pca9555_initialize(FAR struct i2c_master_s *i2cdev,
                                                 FAR struct pca9555_config_s *config)
 {
   FAR struct pca9555_dev_s *pcadev;
@@ -579,18 +706,12 @@ FAR struct ioexpander_dev_s *pca9555_initialize(FAR struct i2c_dev_s *i2cdev,
   pcadev->dev.ops = &g_pca9555_ops;
   pcadev->config  = config;
 
-  /* Set the I2C address and frequency.  REVISIT:  This logic would be
-   * insufficient if we share the I2C bus with any other devices that also
-   * modify the address and frequency.
-   */
-
-  I2C_SETADDRESS(i2cdev, config->address, 7);
-  I2C_SETFREQUENCY(i2cdev, config->frequency);
-
 #ifdef CONFIG_PCA9555_INT_ENABLE
   pcadev->config->attach(pcadev->config, pca9555_interrupt);
   pcadev->config->enable(pcadev->config, TRUE);
 #endif
+
+  sem_init(&pcadev->exclsem, 0, 1);
   return &pcadev->dev;
 }
 

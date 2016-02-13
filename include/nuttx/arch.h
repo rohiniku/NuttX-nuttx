@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/arch.h
  *
- *   Copyright (C) 2007-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1634,6 +1634,126 @@ int up_timer_cancel(FAR struct timespec *ts);
 
 #if defined(CONFIG_SCHED_TICKLESS) && !defined(CONFIG_SCHED_TICKLESS_ALARM)
 int up_timer_start(FAR const struct timespec *ts);
+#endif
+
+/****************************************************************************
+ * Multiple CPU support
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: up_testset
+ *
+ * Description:
+ *   Perform and atomic test and set operation on the provided spinlock.
+ *
+ * Input Parameters:
+ *   lock - The address of spinlock object.
+ *
+ * Returned Value:
+ *   The spinlock is always locked upon return.  The value of previous value
+ *   of the spinlock variable is returned, either SP_LOCKED if the spinlock
+ *   as previously locked (meaning that the test-and-set operation failed to
+ *   obtain the lock) or SP_UNLOCKED if the spinlock was previously unlocked
+ *   (meaning that we successfully obtained the lock)
+ *
+ ****************************************************************************/
+
+/* See prototype in include/nuttx/spinlock.h */
+
+/****************************************************************************
+ * Name: up_cpundx
+ *
+ * Description:
+ *   Return an index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
+ *   corresponds to the currently executing CPU.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   An integer index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
+ *   corresponds to the currently executing CPU.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+int up_cpundx(void);
+#else
+#  define up_cpundx() (0)
+#endif
+
+/****************************************************************************
+ * Name: up_cpustart
+ *
+ * Description:
+ *   In an SMP configution, only one CPU is initially active (CPU 0). System
+ *   initialization occurs on that single thread. At the completion of the
+ *   initialization of the OS, just before beginning normal multitasking,
+ *   the additional CPUs would be started by calling this function.
+ *
+ *   Each CPU is provided the entry point to is IDLE task when started.  The
+ *   OS initialization logic calls this function repeatedly until each CPU
+ *   has been started.
+ *
+ * Input Parameters:
+ *   cpu - The index of the CPU being started.  This will be a numeric
+ *         value in the range of from one to (CONFIG_SMP_NCPUS-1).  (CPU
+ *         0 is already active)
+ *   idletask - The entry point to the IDLE task.
+ *   pid - Task ID of the IDLE task
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+int up_cpustart(int cpu, main_t idletask, pid_t pid);
+#endif
+
+/****************************************************************************
+ * Name: up_cpustop
+ *
+ * Description:
+ *   Save the state of the current task at the head of the
+ *   g_assignedtasks[cpu] task list and then stop the CPU.
+ *
+ *   This function is called by the OS when the logic executing on one CPU
+ *   needs to modify the state of the g_assignedtasks[cpu] list for another
+ *   CPU.
+ *
+ * Input Parameters:
+ *   cpu - The index of the CPU to be stopped/
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+int up_cpustop(int cpu);
+#endif
+
+/****************************************************************************
+ * Name: up_cpurestart
+ *
+ * Description:
+ *   Restart the cpu, restoring the state of the task at the head of the
+ *   g_assignedtasks[cpu] list.
+ *
+ *   This function is called after up_cpustop in order resume operation of
+ *   the CPU after modifying its g_assignedtasks[cpu] list.
+ *
+ * Input Parameters:
+ *   cpu - The index of the CPU being re-started.
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+int up_cpurestart(int cpu);
 #endif
 
 /****************************************************************************

@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/sched/sched_unlock.c
  *
- *   Copyright (C) 2007, 2009, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,7 +63,7 @@
 
 int sched_unlock(void)
 {
-  FAR struct tcb_s *rtcb = (FAR struct tcb_s *)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
   /* Check for some special cases:  (1) rtcb may be NULL only during
    * early boot-up phases, and (2) sched_unlock() should have no
@@ -90,6 +90,24 @@ int sched_unlock(void)
       if (rtcb->lockcount <= 0)
         {
           rtcb->lockcount = 0;
+
+#ifdef CONFIG_SMP
+          /* The lockcount has decremented to zero and we need to perform
+           * release our hold on the lock.
+           *
+           * REVISIT: It might be possible for two CPUs to hold the logic in
+           * some strange cornercases like:
+           */
+
+          DEBUGASSERT(g_cpu_schedlock == SP_LOCKED &&
+                     (g_cpu_lockset & (1 << this_cpu())) != 0);
+
+          g_cpu_lockset &= ~(1 << this_cpu());
+          if (g_cpu_lockset == 0)
+            {
+              spin_unlock(g_cpu_schedlock);
+            }
+#endif
 
           /* Release any ready-to-run tasks that have collected in
            * g_pendingtasks.
@@ -118,7 +136,7 @@ int sched_unlock(void)
                * maximum.
                */
 
-              if (rtcb != (FAR struct tcb_s *)g_readytorun.head)
+              if (rtcb != this_task())
                 {
                   rtcb->timeslice = MSEC2TICK(CONFIG_RR_INTERVAL);
                 }
@@ -156,7 +174,7 @@ int sched_unlock(void)
                * change the currently active task.
                */
 
-              if (rtcb == (FAR struct tcb_s *)g_readytorun.head)
+              if (rtcb == this_task())
                 {
                   sched_timer_reassess();
                 }

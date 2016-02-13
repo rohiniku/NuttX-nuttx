@@ -91,7 +91,6 @@
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define FTMAC100_WDDELAY   (1*CLK_TCK)
-#define FTMAC100_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -322,7 +321,7 @@ static int ftmac100_transmit(FAR struct ftmac100_driver_s *priv)
   /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
   (void)wd_start(priv->ft_txtimeout, FTMAC100_TXTIMEOUT,
-                 ftmac100_txtimeout_expiry, 1, (uint32_t)priv);
+                 ftmac100_txtimeout_expiry, 1, (wdparm_t)priv);
 
 //irqrestore(flags);
   return OK;
@@ -838,7 +837,17 @@ static void ftmac100_txdone(FAR struct ftmac100_driver_s *priv)
 
   nvdbg("txpending=%d\n", priv->tx_pending);
 
+  /* Cancel the TX timeout */
+
   wd_cancel(priv->ft_txtimeout);
+
+  /* Then make sure that the TX poll timer is running (if it is already
+   * running, the following would restart it).  This is necessary to avoid
+   * certain race conditions where the polling sequence can be interrupted.
+   */
+
+  (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1,
+                 (wdparm_t)priv);
 
   /* Then poll uIP for new XMIT data */
 
@@ -1191,11 +1200,12 @@ static inline void ftmac100_poll_process(FAR struct ftmac100_driver_s *priv)
    * we will missing TCP time state updates?
    */
 
-  (void)devif_timer(&priv->ft_dev, ftmac100_txpoll, FTMAC100_POLLHSEC);
+  (void)devif_timer(&priv->ft_dev, ftmac100_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1, priv);
+  (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1,
+                 (wdparm_t)priv);
 }
 
 /****************************************************************************
@@ -1268,7 +1278,8 @@ static void ftmac100_poll_expiry(int argc, uint32_t arg, ...)
        * cycle.
        */
 
-      (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1, arg);
+      (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry,
+                     1, (wdparm_t)arg);
     }
 
 #else
@@ -1329,7 +1340,8 @@ static int ftmac100_ifup(struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1, (uint32_t)priv);
+  (void)wd_start(priv->ft_txpoll, FTMAC100_WDDELAY, ftmac100_poll_expiry, 1,
+                 (wdparm_t)priv);
 
   /* Enable the Ethernet interrupt */
 

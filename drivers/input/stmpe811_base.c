@@ -287,7 +287,7 @@ static void stmpe811_reset(FAR struct stmpe811_dev_s *priv)
 STMPE811_HANDLE stmpe811_instantiate(FAR struct spi_dev_s *dev,
                                      FAR struct stmpe811_config_s *config)
 #else
-STMPE811_HANDLE stmpe811_instantiate(FAR struct i2c_dev_s *dev,
+STMPE811_HANDLE stmpe811_instantiate(FAR struct i2c_master_s *dev,
                                      FAR struct stmpe811_config_s *config)
 #endif
 {
@@ -324,14 +324,6 @@ STMPE811_HANDLE stmpe811_instantiate(FAR struct i2c_dev_s *dev,
   priv->spi = dev;
 #else
   priv->i2c = dev;
-
-  /* Set the I2C address and frequency.  REVISIT:  This logic would be
-   * insufficient if we share the I2C bus with any other devices that also
-   * modify the address and frequency.
-   */
-
-  I2C_SETADDRESS(dev, config->address, 7);
-  I2C_SETFREQUENCY(dev, config->frequency);
 #endif
 
   /* Read and verify the STMPE811 chip ID */
@@ -409,19 +401,21 @@ uint8_t stmpe811_getreg8(FAR struct stmpe811_dev_s *priv, uint8_t regaddr)
 
   /* Setup 8-bit STMPE811 address write message */
 
-  msg[0].addr   = priv->config->address; /* 7-bit address */
-  msg[0].flags  = 0;                     /* Write transaction, beginning with START */
-  msg[0].buffer = &regaddr;              /* Transfer from this address */
-  msg[0].length = 1;                     /* Send one byte following the address
-                                          * (no STOP) */
+  msg[0].frequency = priv->config->frequency; /* I2C frequency */
+  msg[0].addr      = priv->config->address;   /* 7-bit address */
+  msg[0].flags     = 0;                       /* Write transaction, beginning with START */
+  msg[0].buffer    = &regaddr;                /* Transfer from this address */
+  msg[0].length    = 1;                       /* Send one byte following the address
+                                               * (no STOP) */
 
   /* Set up the 8-bit STMPE811 data read message */
 
-  msg[1].addr   = priv->config->address; /* 7-bit address */
-  msg[1].flags  = I2C_M_READ;            /* Read transaction, beginning with Re-START */
-  msg[1].buffer = &regval;               /* Transfer to this address */
-  msg[1].length = 1;                     /* Receive one byte following the address
-                                          * (then STOP) */
+  msg[1].frequency = priv->config->frequency; /* I2C frequency */
+  msg[1].addr      = priv->config->address;   /* 7-bit address */
+  msg[1].flags     = I2C_M_READ;              /* Read transaction, beginning with Re-START */
+  msg[1].buffer    = &regval;                 /* Transfer to this address */
+  msg[1].length    = 1;                       /* Receive one byte following the address
+                                               * (then STOP) */
 
   /* Perform the transfer */
 
@@ -473,10 +467,11 @@ void stmpe811_putreg8(FAR struct stmpe811_dev_s *priv,
 
   /* Setup 8-bit STMPE811 address write message */
 
-  msg.addr   = priv->config->address; /* 7-bit address */
-  msg.flags  = 0;                     /* Write transaction, beginning with START */
-  msg.buffer = txbuffer;              /* Transfer from this address */
-  msg.length = 2;                     /* Send two byte following the address
+  msg.frequency = priv->config->frequency; /* I2C frequency */
+  msg.addr      = priv->config->address;   /* 7-bit address */
+  msg.flags     = 0;                       /* Write transaction, beginning with START */
+  msg.buffer    = txbuffer;                /* Transfer from this address */
+  msg.length    = 2;                       /* Send two byte following the address
                                        * (then STOP) */
 
   /* Perform the transfer */
@@ -514,19 +509,21 @@ uint16_t stmpe811_getreg16(FAR struct stmpe811_dev_s *priv, uint8_t regaddr)
 
   /* Setup 8-bit STMPE811 address write message */
 
-  msg[0].addr   = priv->config->address; /* 7-bit address */
-  msg[0].flags  = 0;                     /* Write transaction, beginning with START */
-  msg[0].buffer = &regaddr;              /* Transfer from this address */
-  msg[0].length = 1;                     /* Send one byte following the address
-                                          * (no STOP) */
+  msg[0].frequency = priv->config->frequency; /* I2C frequency */
+  msg[0].addr      = priv->config->address;   /* 7-bit address */
+  msg[0].flags     = 0;                       /* Write transaction, beginning with START */
+  msg[0].buffer    = &regaddr;                /* Transfer from this address */
+  msg[0].length    = 1;                       /* Send one byte following the address
+                                               * (no STOP) */
 
   /* Set up the 8-bit STMPE811 data read message */
 
-  msg[1].addr   = priv->config->address; /* 7-bit address */
-  msg[1].flags  = I2C_M_READ;            /* Read transaction, beginning with Re-START */
-  msg[1].buffer = rxbuffer;              /* Transfer to this address */
-  msg[1].length = 2;                     /* Receive two bytes following the address
-                                          * (then STOP) */
+  msg[1].frequency = priv->config->frequency; /* I2C frequency */
+  msg[1].addr      = priv->config->address;   /* 7-bit address */
+  msg[1].flags     = I2C_M_READ;              /* Read transaction, beginning with Re-START */
+  msg[1].buffer    = rxbuffer;                /* Transfer to this address */
+  msg[1].length    = 2;                       /* Receive two bytes following the address
+                                               * (then STOP) */
 
   /* Perform the transfer */
 

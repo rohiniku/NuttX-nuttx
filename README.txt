@@ -1,5 +1,4 @@
 README
-README
 ^^^^^^
 
   o Installation
@@ -1312,6 +1311,8 @@ nuttx/
  |   |   `- README.txt
  |   |- lpc4330-xplorer/
  |   |   `- README.txt
+ |   |- lpc4337-ws/
+ |   |   `- README.txt
  |   |- lpc4357-evb/
  |   |   `- README.txt
  |   |- lpc4370-link2/
@@ -1358,6 +1359,8 @@ nuttx/
  |   |- olimex-lpc-h3131/
  |   |   `- README.txt
  |   |- olimex-stm32-h405/
+ |   |   `- README.txt
+ |   |- olimex-stm32-h407/
  |   |   `- README.txt
  |   |- olimex-stm32-p107/
  |   |   `- README.txt
@@ -1414,6 +1417,7 @@ nuttx/
  |   |- samv71-xult/
  |   |   `- README.txt
  |   |- sim/
+ |   |   |- include/README.txt
  |   |   `- README.txt
  |   |- shenzhou/
  |   |   `- README.txt
@@ -1456,6 +1460,8 @@ nuttx/
  |   |- tm4c1294-launchpad/
  |   |   `- README.txt
  |   |- twr-k60n512/
+ |   |   `- README.txt
+ |   |- u-blox-co27/
  |   |   `- README.txt
  |   |- ubw32/
  |   |   `- README.txt

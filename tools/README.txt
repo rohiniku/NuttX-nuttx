@@ -393,6 +393,9 @@ mkromfsimg.sh
   image.  It accepts an rcS script "template" and generates and image that
   may be mounted under /etc in the NuttX pseudo file system.
 
+  TIP: Edit the resulting header file and mark the generated data values
+  as 'const' so that they will be stored in FLASH.
+
 mkdeps.c
 cnvwindeps.c
 mkwindeps.sh
@@ -540,6 +543,24 @@ indent.sh
   This script can be used to indent .c and .h files in a manner similar
   to my coding NuttX coding style.  It doesn't do a really good job,
   however (see the comments at the top of the indent.sh file).
+
+  USAGE:
+    ./indent.sh [-d] -o <out-file> <in-file>
+    ./indent.sh [-d] <in-file-list>
+    ./indent.sh [-d] -h
+
+  Where:
+    -<in-file>
+      A single, unformatted input file
+    -<in-file-list>
+      A list of unformatted input files that will be reformatted in place.
+    -o <out-file>
+      Write the single, reformatted <in-file> to <out-file>.  <in-file>
+      will not be modified.
+    -d
+      Enable script debug
+    -h
+      Show this help message and exit
 
 refresh.sh
 ----------

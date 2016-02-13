@@ -266,7 +266,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define DM6X_WDDELAY   (1*CLK_TCK)
-#define DM6X_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -727,7 +726,8 @@ static int dm9x_transmit(struct dm9x_driver_s *dm9x)
 
       /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
-      (void)wd_start(dm9x->dm_txtimeout, DM6X_TXTIMEOUT, dm9x_txtimeout, 1, (uint32_t)dm9x);
+      (void)wd_start(dm9x->dm_txtimeout, DM6X_TXTIMEOUT, dm9x_txtimeout, 1,
+                     (wdparm_t)dm9x);
       return OK;
     }
   return -EBUSY;
@@ -1266,12 +1266,13 @@ static void dm9x_polltimer(int argc, uint32_t arg, ...)
     {
       /* If so, update TCP timing states and poll uIP for new XMIT data */
 
-      (void)devif_timer(&dm9x->dm_dev, dm9x_txpoll, DM6X_POLLHSEC);
+      (void)devif_timer(&dm9x->dm_dev, dm9x_txpoll);
     }
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(dm9x->dm_txpoll, DM6X_WDDELAY, dm9x_polltimer, 1, arg);
+  (void)wd_start(dm9x->dm_txpoll, DM6X_WDDELAY, dm9x_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -1375,7 +1376,8 @@ static int dm9x_ifup(struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(dm9x->dm_txpoll, DM6X_WDDELAY, dm9x_polltimer, 1, (uint32_t)dm9x);
+  (void)wd_start(dm9x->dm_txpoll, DM6X_WDDELAY, dm9x_polltimer, 1,
+                 (wdparm_t)dm9x);
 
   /* Enable the DM9X interrupt */
 

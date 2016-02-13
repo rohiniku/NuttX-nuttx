@@ -45,26 +45,6 @@
 #include "task/task.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -82,12 +62,12 @@ pid_t getpid(void)
 
   /* Get the the TCB at the head of the ready-to-run task list.  That
    * will be the currently executing task.  There is an exception to
-   * this:  Verify early in the start-up sequence, the g_readytorun
-   * list may be empty!  This case, of course, the start-up/IDLE thread
-   * with pid == 0 must be running.
+   * this:  Early in the start-up sequence, the ready-to-run list may be
+   * empty!  This case, of course, the start-up/IDLE thread with pid == 0
+   * must be running.
    */
 
-  rtcb = (FAR struct tcb_s *)g_readytorun.head;
+  rtcb = this_task();
   if (rtcb)
     {
       /* Return the task ID from the TCB at the head of the ready-to-run
@@ -98,7 +78,7 @@ pid_t getpid(void)
     }
 
   /* We must have been called earlier in the start up sequence from the
-   * start-up/IDLE thread before the g_readytorun list has been initialized.
+   * start-up/IDLE thread before the ready-to-run list has been initialized.
    */
 
   return 0;

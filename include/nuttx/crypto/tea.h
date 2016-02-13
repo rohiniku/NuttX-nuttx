@@ -1,8 +1,13 @@
 /****************************************************************************
- * libc/netdb/lib_dnsgetaddr.c
+ * include/nuttx/crypto/tea.h
+ * Tiny Encryption Algorithm
  *
- *   Copyright (C) 2007-2009, 2011, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *
+ * https://en.wikipedia.org/wiki/Tiny_Encryption_Algorithm:  "Following is
+ * an adaptation of the reference encryption and decryption routines in C,
+ * released into the public domain by David Wheeler and Roger Needham."
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,66 +38,40 @@
  *
  ****************************************************************************/
 
+#ifndef __INCLUDE_NUTTX_CRYPTO_TEA_H
+#define __INCLUDE_NUTTX_CRYPTO_TEA_H 1
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
-#include <nuttx/config.h>
-
-#include <sys/socket.h>
-
-#include <string.h>
-#include <errno.h>
-#include <assert.h>
-
-#include <netinet/in.h>
-
-#include <nuttx/net/dns.h>
-
-#include <apps/netutils/netlib.h>
-
-#if defined(CONFIG_NET_IPv4) && defined(CONFIG_NETDB_DNSCLIENT)
+#include <stdint.h>
 
 /****************************************************************************
- * Public Functions
+ * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Name: dns_getaddr
+ * Name: tea_encrypt
  *
- * Description:
- *   Get the DNS server IPv4 address
- *
- * Parameters:
- *   ipaddr   The location to return the IPv4 address
- *
- * Return:
- *   Zero (OK) is returned on success; A negated errno value is returned
- *   on failure.
+ * Input Parameters:
+ *   value = 2 x 32-bit value (input/output)
+ *   key   = 4 x 32-bit Cache key (input)
  *
  ****************************************************************************/
 
-int dns_getaddr(FAR struct in_addr *inaddr)
-{
-  struct sockaddr_in addr;
-  socklen_t addrlen;
-  int ret = -EINVAL;
+void tea_encrypt(FAR uint32_t *value, FAR const uint32_t *key);
 
-  if (inaddr)
-    {
-      addrlen = sizeof(struct sockaddr_in);
-      ret = dns_getserver((FAR struct sockaddr *)&addr, &addrlen);
-      if (ret >= 0)
-        {
-          /* Sanity check */
+/****************************************************************************
+ * Name: tea_decrypt
+ *
+ * Input Parameters:
+ *   value = 2 x 32-bit value (input/output)
+ *   key   = 4 x 32-bit Cache key (input)
+ *
+ ****************************************************************************/
 
-          DEBUGASSERT(addr.sin_family == AF_INET &&
-                      addrlen == sizeof(struct sockaddr_in));
-          memcpy(inaddr, &addr.sin_addr, sizeof(struct in_addr));
-        }
-    }
+void tea_decrypt(FAR uint32_t *value, FAR const uint32_t *key);
 
-  return ret;
-}
+#endif /* __INCLUDE_NUTTX_CRYPTO_TEA_H */
 
-#endif /* CONFIG_NET_IPv4 && CONFIG_NETDB_DNSCLIENT */

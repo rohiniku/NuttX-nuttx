@@ -104,6 +104,20 @@ config CAN_EXTID
 		Enables support for the 28-bit extended ID.  Default Standard 11-bit
 		IDs.
 
+config ARCH_HAVE_CAN_ERRORS
+	bool
+	default n
+
+config CAN_ERRORS
+	bool "CAN error reporting"
+	default n
+	depends on ARCH_HAVE_CAN_ERRORS
+	---help---
+		Support CAN error reporting.  If this option is selected then CAN
+		error reporting is enabled.  In the event of an error, the ch_error
+		bit will be set in the CAN message and the following message payload
+		will include a more detailed description of certain errors.
+
 config CAN_FD
 	bool "CAN FD"
 	default n
@@ -254,41 +268,11 @@ menuconfig I2C
 	default n
 	---help---
 		This selection enables building of the "upper-half" I2C driver.
-		See include/nuttx/i2c.h for further I2C driver information.
+		See include/nuttx/i2c/i2c_master.h for further I2C driver information.
 
 if I2C
-
-config I2C_SLAVE
-	bool "I2C Slave"
-	default n
-
-config I2C_TRANSFER
-	bool "Support the I2C transfer() method"
-	default n
-
-config I2C_WRITEREAD
-	bool "Support the I2C writeread() method"
-	default n
-
-config I2C_POLLED
-	bool "Polled I2C (no interrupts)"
-	default n
-
-config I2C_TRACE
-	bool "Enable I2C trace debug"
-	default n
-
-config I2C_NTRACE
-	int "Number of I2C trace records"
-	default 32
-	depends on I2C_TRACE
-
-config I2C_RESET
-	bool "Support up_i2creset"
-	default n
-	depends on ARCH_HAVE_I2CRESET
-
-endif # I2C
+source drivers/i2c/Kconfig
+endif
 
 menuconfig SPI
 	bool "SPI Driver Support"
@@ -418,6 +402,16 @@ menuconfig MMCSD
 if MMCSD
 source drivers/mmcsd/Kconfig
 endif # MMCSD
+
+menuconfig MODEM
+	bool "Modem Support"
+	default n
+	---help---
+		Enable modem support.
+
+if MODEM
+source drivers/modem/Kconfig
+endif # MODEM
 
 menuconfig MTD
 	bool "Memory Technology Device (MTD) Support"

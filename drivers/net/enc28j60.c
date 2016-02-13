@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/net/enc28j60.c
  *
- *   Copyright (C) 2010-2012, 2014-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2012, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -144,7 +144,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define ENC_WDDELAY   (1*CLK_TCK)
-#define ENC_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -270,15 +269,9 @@ static struct enc_driver_s g_enc28j60[CONFIG_ENC28J60_NINTERFACES];
 
 /* Low-level SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void enc_configspi(FAR struct spi_dev_s *spi);
-#  define enc_lock(priv);
-#  define enc_unlock(priv);
-#else
-#  define enc_configspi(spi)
 static void enc_lock(FAR struct enc_driver_s *priv);
 static inline void enc_unlock(FAR struct enc_driver_s *priv);
-#endif
 
 /* SPI control register access */
 
@@ -372,18 +365,15 @@ static int  enc_reset(FAR struct enc_driver_s *priv);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void enc_configspi(FAR struct spi_dev_s *spi)
 {
-  /* Configure SPI for the ENC28J60.  But only if we own the SPI bus.
-   * Otherwise, don't bother because it might change.
-   */
+  /* Configure SPI for the ENC28J60. */
 
   SPI_SETMODE(spi, CONFIG_ENC28J60_SPIMODE);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_ENC28J60_FREQUENCY);
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_ENC28J60_FREQUENCY);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_lock
@@ -401,7 +391,6 @@ static inline void enc_configspi(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void enc_lock(FAR struct enc_driver_s *priv)
 {
   /* Lock the SPI bus in case there are multiple devices competing for the SPI
@@ -416,9 +405,9 @@ static void enc_lock(FAR struct enc_driver_s *priv)
 
   SPI_SETMODE(priv->spi, CONFIG_ENC28J60_SPIMODE);
   SPI_SETBITS(priv->spi, 8);
-  SPI_SETFREQUENCY(priv->spi, CONFIG_ENC28J60_FREQUENCY);
+  (void)SPI_HWFEATURES(priv->spi, 0);
+  (void)SPI_SETFREQUENCY(priv->spi, CONFIG_ENC28J60_FREQUENCY);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_unlock
@@ -436,14 +425,12 @@ static void enc_lock(FAR struct enc_driver_s *priv)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static inline void enc_unlock(FAR struct enc_driver_s *priv)
 {
   /* Relinquish the lock on the bus. */
 
   SPI_LOCK(priv->spi, false);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_rdgreg2
@@ -750,8 +737,8 @@ static void enc_wrbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
 static int enc_waitbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
                         uint8_t bits, uint8_t value)
 {
-  uint32_t start = clock_systimer();
-  uint32_t elapsed;
+  systime_t start = clock_systimer();
+  systime_t elapsed;
   uint8_t  rddata;
 
   /* Loop until the exit condition is met */
@@ -1158,7 +1145,8 @@ static int enc_transmit(FAR struct enc_driver_s *priv)
    * the timer is started?
    */
 
-  (void)wd_start(priv->txtimeout, ENC_TXTIMEOUT, enc_txtimeout, 1, (uint32_t)priv);
+  (void)wd_start(priv->txtimeout, ENC_TXTIMEOUT, enc_txtimeout, 1,
+                 (wdparm_t)priv);
   return OK;
 }
 
@@ -1290,6 +1278,15 @@ static void enc_txif(FAR struct enc_driver_s *priv)
   /* If no further xmits are pending, then cancel the TX timeout */
 
   wd_cancel(priv->txtimeout);
+
+  /* Then make sure that the TX poll timer is running (if it is already
+   * running, the following would restart it).  This is necessary to
+   * avoid certain race conditions where the polling sequence can be
+   * interrupted.
+   */
+
+  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                 (wdparm_t)priv);
 
   /* Then poll uIP for new XMIT data */
 
@@ -1994,7 +1991,7 @@ static void enc_pollworker(FAR void *arg)
        * in progress, we will missing TCP time state updates?
        */
 
-      (void)devif_timer(&priv->dev, enc_txpoll, ENC_POLLHSEC);
+      (void)devif_timer(&priv->dev, enc_txpoll);
     }
 
   /* Release lock on the SPI bus and uIP */
@@ -2004,7 +2001,8 @@ static void enc_pollworker(FAR void *arg)
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, arg);
+  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -2102,7 +2100,8 @@ static int enc_ifup(struct net_driver_s *dev)
 
       /* Set and activate a timer process */
 
-      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, (uint32_t)priv);
+      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                     (wdparm_t)priv);
 
       /* Mark the interface up and enable the Ethernet interrupt at the
        * controller

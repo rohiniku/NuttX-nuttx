@@ -5,6 +5,9 @@
  *   Copyright (C) 2015 Omni Hoverboards Inc. All rights reserved.
  *   Author: Paul Alexander Patience <paul-a.patience@polymtl.ca>
  *
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -46,10 +49,18 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/sensors/mb7040.h>
 
 #if defined(CONFIG_I2C) && defined(CONFIG_MB7040)
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#ifndef CONFIG_MB7040_I2C_FREQUENCY
+#  define CONFIG_MB7040_I2C_FREQUENCY 400000
+#endif
 
 /****************************************************************************
  * Private Types
@@ -57,8 +68,8 @@
 
 struct mb7040_dev_s
 {
-  FAR struct i2c_dev_s *i2c;  /* I2C interface */
-  uint8_t               addr; /* I2C address */
+  FAR struct i2c_master_s *i2c;  /* I2C interface */
+  uint8_t                  addr; /* I2C address */
 };
 
 /****************************************************************************
@@ -116,19 +127,26 @@ static const struct file_operations g_fops =
 
 static int mb7040_measurerange(FAR struct mb7040_dev_s *priv)
 {
+  struct i2c_config_s config;
   uint8_t regaddr;
   int ret;
 
-  regaddr = MB7040_RANGE_REG;
   sndbg("addr: %02x\n", regaddr);
+
+  /* Set up the I2C configuration */
+
+  config.frequency = CONFIG_MB7040_I2C_FREQUENCY;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
 
   /* Write the register address */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
-  ret = I2C_WRITE(priv->i2c, &regaddr, sizeof(regaddr));
+  regaddr = MB7040_RANGE_REG;
+
+  ret = i2c_write(priv->i2c, &config, &regaddr, sizeof(regaddr));
   if (ret < 0)
     {
-      sndbg("I2C_WRITE failed: %d\n", ret);
+      sndbg("i2c_write failed: %d\n", ret);
     }
 
   return ret;
@@ -145,16 +163,22 @@ static int mb7040_measurerange(FAR struct mb7040_dev_s *priv)
 static int mb7040_readrange(FAR struct mb7040_dev_s *priv,
                             FAR uint16_t *range)
 {
+  struct i2c_config_s config;
   uint8_t buffer[2];
   int ret;
 
+  /* Set up the I2C configuration */
+
+  config.frequency = CONFIG_MB7040_I2C_FREQUENCY;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
+
   /* Read two bytes */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
-  ret = I2C_READ(priv->i2c, buffer, sizeof(buffer));
+  ret = i2c_read(priv->i2c, &config, buffer, sizeof(buffer));
   if (ret < 0)
     {
-      sndbg("I2C_READ failed: %d\n", ret);
+      sndbg("i2c_read failed: %d\n", ret);
       return ret;
     }
 
@@ -173,6 +197,7 @@ static int mb7040_readrange(FAR struct mb7040_dev_s *priv,
 
 static int mb7040_changeaddr(FAR struct mb7040_dev_s *priv, uint8_t addr)
 {
+  struct i2c_config_s config;
   uint8_t buffer[3];
   int ret;
 
@@ -189,13 +214,18 @@ static int mb7040_changeaddr(FAR struct mb7040_dev_s *priv, uint8_t addr)
   buffer[1] = MB7040_ADDRUNLOCK2_REG;
   buffer[2] = addr;
 
+  /* Set up the I2C configuration */
+
+  config.frequency = CONFIG_MB7040_I2C_FREQUENCY;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
+
   /* Write the register address followed by the data (no RESTART) */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
-  ret = I2C_WRITE(priv->i2c, buffer, sizeof(buffer));
+  ret = i2c_write(priv->i2c, &config, buffer, sizeof(buffer));
   if (ret < 0)
     {
-      sndbg("I2C_WRITE failed: %d\n", ret);
+      sndbg("i2c_write failed: %d\n", ret);
       return ret;
     }
 
@@ -336,7 +366,7 @@ static int mb7040_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
  *
  ****************************************************************************/
 
-int mb7040_register(FAR const char *devpath, FAR struct i2c_dev_s *i2c,
+int mb7040_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
                     uint8_t addr)
 {
   FAR struct mb7040_dev_s *priv;

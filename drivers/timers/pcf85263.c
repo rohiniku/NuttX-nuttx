@@ -45,7 +45,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/timers/pcf85263.h>
 
 #include "pcf85263.h"
@@ -64,10 +64,6 @@
 
 #ifdef CONFIG_RTC_HIRES
 #  error CONFIG_RTC_HIRES must NOT be set with this driver
-#endif
-
-#ifndef CONFIG_I2C_TRANSFER
-#  error CONFIG_I2C_TRANSFER is required by this driver
 #endif
 
 #ifndef CONFIG_PCF85263_I2C_FREQUENCY
@@ -108,7 +104,7 @@
 
 struct pcf85263_dev_s
 {
-  FAR struct i2c_dev_s *i2c;  /* Contained reference to the I2C bus driver */
+  FAR struct i2c_master_s *i2c;  /* Contained reference to the I2C bus driver */
 };
 
 /************************************************************************************
@@ -237,7 +233,7 @@ static int rtc_bcd2bin(uint8_t value)
  *
  ************************************************************************************/
 
-int pcf85263_rtc_initialize(FAR struct i2c_dev_s *i2c)
+int pcf85263_rtc_initialize(FAR struct i2c_master_s *i2c)
 {
   /* Remember the i2c device and claim that the RTC is enabled */
 
@@ -301,41 +297,40 @@ int up_rtc_getdatetime(FAR struct tm *tp)
 
   /* Select to begin reading at the seconds register */
 
-  secaddr       = PCF85263_RTC_SECONDS;
+  secaddr          = PCF85263_RTC_SECONDS;
 
-  msg[0].addr   = PCF85263_I2C_ADDRESS;
-  msg[0].flags  = 0;
-  msg[0].buffer = &secaddr;
-  msg[0].length = 1;
+  msg[0].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[0].addr      = PCF85263_I2C_ADDRESS;
+  msg[0].flags     = 0;
+  msg[0].buffer    = &secaddr;
+  msg[0].length    = 1;
 
   /* Set up to read 7 registers: secondss, minutes, hour, day-of-week, date,
    * month, year
    */
 
-  msg[1].addr   = PCF85263_I2C_ADDRESS;
-  msg[1].flags  = I2C_M_READ;
-  msg[1].buffer = buffer;
-  msg[1].length = 7;
+  msg[1].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[1].addr      = PCF85263_I2C_ADDRESS;
+  msg[1].flags     = I2C_M_READ;
+  msg[1].buffer    = buffer;
+  msg[1].length    = 7;
 
   /* Read the seconds register again */
 
-  msg[2].addr   = PCF85263_I2C_ADDRESS;
-  msg[2].flags  = 0;
-  msg[2].buffer = &secaddr;
-  msg[2].length = 1;
+  msg[2].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[2].addr      = PCF85263_I2C_ADDRESS;
+  msg[2].flags     = 0;
+  msg[2].buffer    = &secaddr;
+  msg[2].length    = 1;
 
-  msg[3].addr   = PCF85263_I2C_ADDRESS;
-  msg[3].flags  = I2C_M_READ;
-  msg[3].buffer = &seconds;
-  msg[3].length = 1;
+  msg[3].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[3].addr      = PCF85263_I2C_ADDRESS;
+  msg[3].flags     = I2C_M_READ;
+  msg[3].buffer    = &seconds;
+  msg[3].length    = 1;
 
-  /* Configure I2C before using it */
-
-  I2C_SETFREQUENCY(g_pcf85263.i2c, CONFIG_PCF85263_I2C_FREQUENCY);
-
-  /* Perform the transfer (This could be done with I2C_WRITEREAD()).  The
-   * transfer may be performed repeatedly of the seconds values decreases,
-   * meaning that that was a rollover in the seconds.
+  /* Perform the transfer.  The transfer may be performed repeatedly of the
+   * seconds values decreases, meaning that that was a rollover in the seconds.
    */
 
   do
@@ -492,32 +487,30 @@ int up_rtc_settime(FAR const struct timespec *tp)
 
   /* Setup the I2C message */
 
-  msg[0].addr   = PCF85263_I2C_ADDRESS;
-  msg[0].flags  = 0;
-  msg[0].buffer = buffer;
-  msg[0].length = 9;
+  msg[0].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[0].addr      = PCF85263_I2C_ADDRESS;
+  msg[0].flags     = 0;
+  msg[0].buffer    = buffer;
+  msg[0].length    = 9;
 
   /* Read back the seconds register */
 
-  cmd           = PCF85263_RTC_SECONDS;
+  cmd              = PCF85263_RTC_SECONDS;
 
-  msg[1].addr   = PCF85263_I2C_ADDRESS;
-  msg[1].flags  = 0;
-  msg[1].buffer = &cmd;
-  msg[1].length = 1;
+  msg[1].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[1].addr      = PCF85263_I2C_ADDRESS;
+  msg[1].flags     = 0;
+  msg[1].buffer    = &cmd;
+  msg[1].length    = 1;
 
-  msg[2].addr   = PCF85263_I2C_ADDRESS;
-  msg[2].flags  = I2C_M_READ;
-  msg[2].buffer = &seconds;
-  msg[2].length = 1;
+  msg[2].frequency = CONFIG_PCF85263_I2C_FREQUENCY;
+  msg[2].addr      = PCF85263_I2C_ADDRESS;
+  msg[2].flags     = I2C_M_READ;
+  msg[2].buffer    = &seconds;
+  msg[2].length    = 1;
 
-  /* Configure I2C before using it */
-
-  I2C_SETFREQUENCY(g_pcf85263.i2c, CONFIG_PCF85263_I2C_FREQUENCY);
-
-  /* Perform the transfer (This could be done with I2C_READ).  This transfer
-   * will be repeated if the seconds count rolls over to a smaller value
-   * while writing.
+  /* Perform the transfer.  This transfer will be repeated if the seconds
+   * count rolls over to a smaller value while writing.
    */
 
   do

@@ -76,7 +76,6 @@
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define CS89x0_WDDELAY   (1*CLK_TCK)
-#define CS89x0_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -306,7 +305,8 @@ static int cs89x0_transmit(struct cs89x0_driver_s *cs89x0)
 
   /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
-  (void)wd_start(cs89x0->cs_txtimeout, CS89x0_TXTIMEOUT, cs89x0_txtimeout, 1, (uint32_t)cs89x0);
+  (void)wd_start(cs89x0->cs_txtimeout, CS89x0_TXTIMEOUT, cs89x0_txtimeout,
+                 1, (wdparm_t)cs89x0);
   return OK;
 }
 
@@ -790,11 +790,12 @@ static void cs89x0_polltimer(int argc, uint32_t arg, ...)
 
   /* If so, update TCP timing states and poll uIP for new XMIT data */
 
-  (void)devif_timer(&cs89x0->cs_dev, cs89x0_txpoll, CS89x0_POLLHSEC);
+  (void)devif_timer(&cs89x0->cs_dev, cs89x0_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1, arg);
+  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -827,7 +828,8 @@ static int cs89x0_ifup(struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1, (uint32_t)cs89x0);
+  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1,
+                 (wdparm_t)cs89x0);
 
   /* Enable the Ethernet interrupt */
 

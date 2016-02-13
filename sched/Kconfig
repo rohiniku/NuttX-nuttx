@@ -147,7 +147,7 @@ config SYSTEM_TIME64
 		USEC_PER_TICK, typically at 100Hz. The count at any given time is
 		then the "uptime" in units of system timer ticks.  By default, the
 		system time is 32-bits wide.  Those defaults provide a range of about
-		13.6 years which is probably a sufficient range for "uptime".
+		497 days which is probably a sufficient range for "uptime".
 
 		However, if the system timer rate is significantly higher than 100Hz
 		and/or if a very long "uptime" is required, then this option can be
@@ -228,6 +228,44 @@ config PREALLOC_TIMERS
 endmenu # Clocks and Timers
 
 menu "Tasks and Scheduling"
+
+config SPINLOCK
+	bool "Support Spinlocks"
+	default n
+	depends on EXPERIMENTAL
+	---help---
+		Enables suppport for spinlocks.  Spinlocks are current used only for
+		SMP suppport.
+
+config SMP
+	bool "Symmetric Multi-Processing (SMP)"
+	default n
+	depends on ARCH_HAVE_MULTICPU && EXPERIMENTAL
+	select SPINLOCK
+	---help---
+		Enable support for Symmetric Multi-Processing (SMP) on a multi-CPU
+		platform.
+
+if SMP
+
+config SMP_NCPUS
+	int "Number of CPUs"
+	default 4
+	range 2 32
+	---help---
+		This value identifies the number of CPUs support by the processor
+		that will be used for SMP.
+
+config SMP_IDLETHREAD_STACKSIZE
+	int "CPU IDLE stack size"
+	default 2048
+	---help---
+		Each CPU will have its own IDLE stack.  System initialization occurs
+		on CPU0 and uses CONFIG_IDLETHREAD_STACKSIZE which will probably be
+		larger than is generally needed.  This setting provides the STACK
+		size for the IDLE task on CPUS 1 through (CONFIG_SMP_NCPUS-1).
+
+endif # SMP
 
 choice
 	prompt "Initialization Task"

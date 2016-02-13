@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/tcp/tcp_send_unbuffered.c
  *
- *   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -103,7 +103,7 @@ struct send_s
   uint32_t                snd_isn;     /* Initial sequence number */
   uint32_t                snd_acked;   /* The number of bytes acked */
 #ifdef CONFIG_NET_SOCKOPTS
-  uint32_t                snd_time;    /* Last send time for determining timeout */
+  systime_t               snd_time;    /* Last send time for determining timeout */
 #endif
 #if defined(CONFIG_NET_TCP_SPLIT)
   bool                    snd_odd;     /* True: Odd packet in pair transaction */
@@ -878,6 +878,32 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
 errout:
   set_errno(err);
   return ERROR;
+}
+
+/****************************************************************************
+ * Function: psock_tcp_cansend
+ *
+ * Description:
+ *   psock_tcp_cansend() returns a value indicating if a write to the socket
+ *   would block.  It is still possible that the write may block if another
+ *   write occurs first.
+ *
+ * Parameters:
+ *   psock    An instance of the internal socket structure.
+ *
+ * Returned Value:
+ *   OK (Function not implemented).
+ *
+ * Assumptions:
+ *   None
+ *
+ ****************************************************************************/
+
+int psock_tcp_cansend(FAR struct socket *psock)
+{
+  /* TODO: return OK unless someone is waiting for a packet to send */
+
+  return OK;
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_TCP && !CONFIG_NET_TCP_WRITE_BUFFERS */

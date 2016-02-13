@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/init/os_start.c
  *
- *   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -73,14 +73,6 @@
 #include  "init/init.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -89,16 +81,52 @@
  * and by a series of task lists.  All of these tasks lists are declared
  * below. Although it is not always necessary, most of these lists are
  * prioritized so that common list handling logic can be used (only the
- * g_readytorun, the g_pendingtasks, and the g_waitingforsemaphore lists need
- * to be prioritized).
+ * g_readytorun, the g_pendingtasks, and the g_waitingforsemaphore lists
+ * need to be prioritized).
  */
 
-/* This is the list of all tasks that are ready to run.  The head of this
- * list is the currently active task; the tail of this list is always the
- * IDLE task.
+/* This is the list of all tasks that are ready to run.  This is a
+ * prioritized list with head of the list holding the highest priority
+ * (unassigned) task.  In the non-SMP cae, the head of this list is the
+ * currently active task and the tail of this list, the lowest priority
+ * task, is always the IDLE task.
  */
 
 volatile dq_queue_t g_readytorun;
+
+#ifdef CONFIG_SMP
+/* In order to support SMP, the function of the g_readytorun list changes,
+ * The g_readytorun is still used but in the SMP cae it will contain only:
+ *
+ *  - Only tasks/threads that are eligible to run, but not currently running,
+ *    and
+ *  - Tasks/threads that have not been assigned to a CPU.
+ *
+ * Otherwise, the TCB will be reatined in an assigned task list,
+ * g_assignedtasks.  As its name suggests, on 'g_assignedtasks queue for CPU
+ * 'n' would contain only tasks/threads that are assigned to CPU 'n'.  Tasks/
+ * threads would be assigned a particular CPU by one of two mechanisms:
+ *
+ *  - (Semi-)permanently through an RTOS interfaces such as
+ *    pthread_attr_setaffinity(), or
+ *  - Temporarily through scheduling logic when a previously unassigned task
+ *    is made to run.
+ *
+ * Tasks/threads that are assigned to a CPU via an interface like
+ * pthread_attr_setaffinity() would never go into the g_readytorun list, but
+ * would only go into the g_assignedtasks[n] list for the CPU 'n' to which
+ * the thread has been assigned.  Hence, the g_readytorun list would hold
+ * only unassigned tasks/threads.
+ *
+ * Like the g_readytorun list in in non-SMP case, each g_assignedtask[] list
+ * is prioritized:  The head of the list is the currently active task on this
+ * CPU.  Tasks after the active task are ready-to-run and assigned to this
+ * CPU. The tail of this assigned task list, the lowest priority task, is
+ * always the CPU's IDLE task.
+ */
+
+volatile dq_queue_t g_assignedtasks[CONFIG_SMP_NCPUS];
+#endif
 
 /* This is the list of all tasks that are ready-to-run, but cannot be placed
  * in the g_readytorun list because:  (1) They are higher priority than the
@@ -175,8 +203,8 @@ volatile pid_t g_lastpid;
 
 /* The following hash table is used for two things:
  *
- * 1. This hash table greatly speeds the determination of
- *    a new unique process ID for a task, and
+ * 1. This hash table greatly speeds the determination of a new unique
+ *    process ID for a task, and
  * 2. Is used to quickly map a process ID into a TCB.
  * It has the side effects of using more memory and limiting
  *
@@ -185,35 +213,87 @@ volatile pid_t g_lastpid;
 
 struct pidhash_s g_pidhash[CONFIG_MAX_TASKS];
 
-/* This is a table of task lists.  This table is indexed by
- * the task state enumeration type (tstate_t) and provides
- * a pointer to the associated static task list (if there
- * is one) as well as a boolean indication as to if the list
- * is an ordered list or not.
+/* This is a table of task lists.  This table is indexed by the task stat
+ * enumeration type (tstate_t) and provides a pointer to the associated
+ * static task list (if there is one) as well as a a set of attribute flags
+ * indicating properities of the list, for example, if the list is an
+ * ordered list or not.
  */
 
 const struct tasklist_s g_tasklisttable[NUM_TASK_STATES] =
 {
-  { NULL,                    false },  /* TSTATE_TASK_INVALID */
-  { &g_pendingtasks,         true  },  /* TSTATE_TASK_PENDING */
-  { &g_readytorun,           true  },  /* TSTATE_TASK_READYTORUN */
-  { &g_readytorun,           true  },  /* TSTATE_TASK_RUNNING */
-  { &g_inactivetasks,        false },  /* TSTATE_TASK_INACTIVE */
-  { &g_waitingforsemaphore,  true  }   /* TSTATE_WAIT_SEM */
+  {                                              /* TSTATE_TASK_INVALID */
+    NULL,
+    0
+  },
+  {                                              /* TSTATE_TASK_PENDING */
+    &g_pendingtasks,
+    TLIST_ATTR_PRIORITIZED
+  },
+#ifdef CONFIG_SMP
+  {                                              /* TSTATE_TASK_READYTORUN */
+    &g_readytorun,
+    TLIST_ATTR_PRIORITIZED
+  },
+  {                                              /* TSTATE_TASK_ASSIGNED */
+    g_assignedtasks,
+    TLIST_ATTR_PRIORITIZED | TLIST_ATTR_INDEXED | TLIST_ATTR_RUNNABLE
+  },
+  {                                              /* TSTATE_TASK_RUNNING */
+    g_assignedtasks,
+    TLIST_ATTR_PRIORITIZED | TLIST_ATTR_INDEXED | TLIST_ATTR_RUNNABLE
+  },
+#else
+  {                                              /* TSTATE_TASK_READYTORUN */
+    &g_readytorun,
+    TLIST_ATTR_PRIORITIZED | TLIST_ATTR_RUNNABLE
+  },
+  {                                              /* TSTATE_TASK_RUNNING */
+    &g_readytorun,
+    TLIST_ATTR_PRIORITIZED | TLIST_ATTR_RUNNABLE
+  },
+#endif
+  {                                              /* TSTATE_TASK_INACTIVE */
+    &g_inactivetasks,
+    0
+  },
+  {                                              /* TSTATE_WAIT_SEM */
+    &g_waitingforsemaphore,
+    TLIST_ATTR_PRIORITIZED
+  }
 #ifndef CONFIG_DISABLE_SIGNALS
   ,
-  { &g_waitingforsignal,     false }  /* TSTATE_WAIT_SIG */
+  {                                              /* TSTATE_WAIT_SIG */
+    &g_waitingforsignal,
+    0
+  }
 #endif
 #ifndef CONFIG_DISABLE_MQUEUE
   ,
-  { &g_waitingformqnotempty, true  },  /* TSTATE_WAIT_MQNOTEMPTY */
-  { &g_waitingformqnotfull,  true  }   /* TSTATE_WAIT_MQNOTFULL */
+  {                                              /* TSTATE_WAIT_MQNOTEMPTY */
+    &g_waitingformqnotempty,
+    TLIST_ATTR_PRIORITIZED
+  },
+  {                                              /* TSTATE_WAIT_MQNOTFULL */
+    &g_waitingformqnotfull,
+    TLIST_ATTR_PRIORITIZED
+  }
 #endif
 #ifdef CONFIG_PAGING
   ,
-  { &g_waitingforfill,       true  }   /* TSTATE_WAIT_PAGEFILL */
+  {                                              /* TSTATE_WAIT_PAGEFILL */
+    &g_waitingforfill,
+    TLIST_ATTR_PRIORITIZED
+  }
 #endif
 };
+
+/* This is the current initialization state.  The level of initialization
+ * is only important early in the start-up sequence when certain OS or
+ * hardware resources may not yet be available to the kernel logic.
+ */
+
+uint8_t g_os_initstate;  /* See enum os_initstate_e */
 
 /****************************************************************************
  * Private Variables
@@ -224,19 +304,19 @@ const struct tasklist_s g_tasklisttable[NUM_TASK_STATES] =
  * initialization task is responsible for bringing up the rest of the system.
  */
 
-static FAR struct task_tcb_s g_idletcb;
+static struct task_tcb_s g_idletcb;
 
 /* This is the name of the idle task */
 
-static FAR const char g_idlename[] = "Idle Task";
+#ifdef CONFIG_SMP
+static const char g_idlename[] = "CPU0 Idle";
+#else
+static const char g_idlename[] = "Idle Task";
+#endif
 
 /* This the IDLE idle threads argument list. */
 
 static FAR char *g_idleargv[2];
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -260,9 +340,14 @@ static FAR char *g_idleargv[2];
 
 void os_start(void)
 {
+  FAR dq_queue_t *tasklist;
   int i;
 
   slldbg("Entry\n");
+
+  /* Boot up is complete */
+
+  g_os_initstate = OSINIT_BOOT;
 
   /* Initialize RTOS Data ***************************************************/
   /* Initialize all task lists */
@@ -287,6 +372,13 @@ void os_start(void)
 #endif
 #ifndef CONFIG_BUILD_KERNEL
   sq_init(&g_delayed_kufree);
+#endif
+
+#ifdef CONFIG_SMP
+  for (i = 0; i < CONFIG_SMP_NCPUS; i++)
+    {
+      dq_init(&g_assignedtasks[i]);
+    }
 #endif
 
   /* Initialize the logic that determine unique process IDs. */
@@ -314,7 +406,16 @@ void os_start(void)
   bzero((void *)&g_idletcb, sizeof(struct task_tcb_s));
   g_idletcb.cmn.task_state = TSTATE_TASK_RUNNING;
   g_idletcb.cmn.entry.main = (main_t)os_start;
+
+  /* Set the task flags to indicate that this is a kernel thread and, if
+   * configured for SMP, that this task is assigned to CPU0.
+   */
+
+#ifdef CONFIG_SMP
+  g_idletcb.cmn.flags      = (TCB_FLAG_TTYPE_KERNEL | TCB_FLAG_CPU_ASSIGNED);
+#else
   g_idletcb.cmn.flags      = TCB_FLAG_TTYPE_KERNEL;
+#endif
 
   /* Set the IDLE task name */
 
@@ -341,7 +442,12 @@ void os_start(void)
 
   /* Then add the idle task's TCB to the head of the ready to run list */
 
-  dq_addfirst((FAR dq_entry_t *)&g_idletcb, (FAR dq_queue_t *)&g_readytorun);
+#ifdef CONFIG_SMP
+  tasklist = TLIST_HEAD(TSTATE_TASK_RUNNING, 0);
+#else
+  tasklist = TLIST_HEAD(TSTATE_TASK_RUNNING);
+#endif
+  dq_addfirst((FAR dq_entry_t *)&g_idletcb, tasklist);
 
   /* Initialize the processor-specific portion of the TCB */
 
@@ -390,6 +496,10 @@ void os_start(void)
 #endif
   }
 #endif
+
+  /* The memory manager is available */
+
+  g_os_initstate = OSINIT_MEMORY;
 
 #if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
   /* Initialize tasking data structures */
@@ -497,6 +607,10 @@ void os_start(void)
 
   up_initialize();
 
+  /* Hardware resources are available */
+
+  g_os_initstate = OSINIT_HARDWARE;
+
 #ifdef CONFIG_NET
   /* Complete initialization the networking system now that interrupts
    * and timers have been configured by up_initialize().
@@ -541,7 +655,19 @@ void os_start(void)
   g_idletcb.cmn.group->tg_flags = GROUP_FLAG_NOCLDWAIT;
 #endif
 
+#ifdef CONFIG_SMP
+  /* Start all CPUs *********************************************************/
+
+  DEBUGASSERT(this_cpu() == 0 && CONFIG_MAX_TASKS > CONFIG_SMP_NCPUS);
+  DEBUGVERIFY(os_smpstart());
+
+#endif /* CONFIG_SMP */
+
   /* Bring Up the System ****************************************************/
+  /* The OS is fully initialized and we are beginning multi-tasking */
+
+  g_os_initstate = OSINIT_OSREADY;
+
   /* Create initial tasks and bring-up the system */
 
   DEBUGVERIFY(os_bringup());
@@ -549,7 +675,7 @@ void os_start(void)
   /* The IDLE Loop **********************************************************/
   /* When control is return to this point, the system is idle. */
 
-  sdbg("Beginning Idle Loop\n");
+  sdbg("CPU0: Beginning Idle Loop\n");
   for (; ; )
     {
       /* Perform garbage collection (if it is not being done by the worker

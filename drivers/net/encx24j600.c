@@ -149,7 +149,6 @@
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define ENC_WDDELAY   (1*CLK_TCK)
-#define ENC_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -248,9 +247,7 @@ struct enc_driver_s
   WDOG_ID               txpoll;        /* TX poll timer */
   WDOG_ID               txtimeout;     /* TX timeout timer */
 
-  /* If we don't own the SPI bus, then we cannot do SPI accesses from the
-   * interrupt handler.
-   */
+  /* Avoid SPI accesses from the interrupt handler by using the work queue */
 
   struct work_s         irqwork;       /* Interrupt continuation work queue support */
   struct work_s         towork;        /* Tx timeout work queue support */
@@ -285,15 +282,8 @@ static struct enc_driver_s g_encx24j600[CONFIG_ENCX24J600_NINTERFACES];
 
 /* Low-level SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void enc_configspi(FAR struct spi_dev_s *spi);
-#  define enc_lock(priv);
-#  define enc_unlock(priv);
-#else
-#  define enc_configspi(spi)
 static void enc_lock(FAR struct enc_driver_s *priv);
 static inline void enc_unlock(FAR struct enc_driver_s *priv);
-#endif
 
 /* SPI control register access */
 
@@ -380,35 +370,6 @@ static int  enc_reset(FAR struct enc_driver_s *priv);
  ****************************************************************************/
 
 /****************************************************************************
- * Function: enc_configspi
- *
- * Description:
- *   Configure the SPI for use with the ENCX24J600
- *
- * Parameters:
- *   spi  - Reference to the SPI driver structure
- *
- * Returned Value:
- *   None
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-#ifdef CONFIG_SPI_OWNBUS
-static inline void enc_configspi(FAR struct spi_dev_s *spi)
-{
-  /* Configure SPI for the ENCX24J600.  But only if we own the SPI bus.
-   * Otherwise, don't bother because it might change.
-   */
-
-  SPI_SETMODE(spi, CONFIG_ENCX24J600_SPIMODE);
-  SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_ENCX24J600_FREQUENCY);
-}
-#endif
-
-/****************************************************************************
  * Function: enc_lock
  *
  * Description:
@@ -424,7 +385,6 @@ static inline void enc_configspi(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void enc_lock(FAR struct enc_driver_s *priv)
 {
   /* Lock the SPI bus in case there are multiple devices competing for the SPI
@@ -439,9 +399,9 @@ static void enc_lock(FAR struct enc_driver_s *priv)
 
   SPI_SETMODE(priv->spi, CONFIG_ENCX24J600_SPIMODE);
   SPI_SETBITS(priv->spi, 8);
-  SPI_SETFREQUENCY(priv->spi, CONFIG_ENCX24J600_FREQUENCY);
+  (void)SPI_HWFEATURES(priv->spi, 0);
+  (void)SPI_SETFREQUENCY(priv->spi, CONFIG_ENCX24J600_FREQUENCY);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_unlock
@@ -459,14 +419,12 @@ static void enc_lock(FAR struct enc_driver_s *priv)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static inline void enc_unlock(FAR struct enc_driver_s *priv)
 {
   /* Relinquish the lock on the bus. */
 
   SPI_LOCK(priv->spi, false);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_cmd
@@ -679,8 +637,8 @@ static void enc_wrreg(FAR struct enc_driver_s *priv, uint16_t ctrlreg,
 static int enc_waitreg(FAR struct enc_driver_s *priv, uint16_t ctrlreg,
                           uint16_t bits, uint16_t value)
 {
-  uint32_t start = clock_systimer();
-  uint32_t elapsed;
+  systime_t start = clock_systimer();
+  systime_t elapsed;
   uint16_t rddata;
 
   /* Loop until the exit condition is met */
@@ -1099,7 +1057,7 @@ static int enc_transmit(FAR struct enc_driver_s *priv)
    */
 
   (void)wd_start(priv->txtimeout, ENC_TXTIMEOUT, enc_txtimeout, 1,
-                (uint32_t)priv);
+                 (wdparm_t)priv);
 
   /* free the descriptor */
 
@@ -1329,6 +1287,15 @@ static void enc_txif(FAR struct enc_driver_s *priv)
 
       wd_cancel(priv->txtimeout);
 
+      /* Then make sure that the TX poll timer is running (if it is already
+       * running, the following would restart it).  This is necessary to
+       * avoid certain race conditions where the polling sequence can be
+       * interrupted.
+       */
+
+      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                     (wdparm_t)priv);
+
       /* Poll for TX packets from the networking layer */
 
       devif_poll(&priv->dev, enc_txpoll);
@@ -1533,7 +1500,7 @@ static void enc_rxdispatch(FAR struct enc_driver_s *priv)
           arp_ipin(&priv->dev);
           ret = ipv4_input(&priv->dev);
 
-          if (ret == OK || (clock_systimer() - descr->ts) > ENC_RXTIMEOUT)
+          if (ret == OK || (clock_systimer() - (systime_t)descr->ts) > ENC_RXTIMEOUT)
             {
               /* If packet has been successfully processed or has timed out,
                * free it.
@@ -1580,7 +1547,7 @@ static void enc_rxdispatch(FAR struct enc_driver_s *priv)
 
           ret = ipv6_input(&priv->dev);
 
-          if (ret == OK || (clock_systimer() - descr->ts) > ENC_RXTIMEOUT)
+          if (ret == OK || (clock_systimer() - (systime_t)descr->ts) > ENC_RXTIMEOUT)
             {
               /* If packet has been successfully processed or has timed out,
                * free it.
@@ -1728,7 +1695,7 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
 
       /* Set current timestamp */
 
-      descr->ts = clock_systimer();
+      descr->ts = (uint32_t)clock_systimer();
 
       /* Store the start address of the frame without the enc's header */
 
@@ -2189,7 +2156,7 @@ static void enc_pollworker(FAR void *arg)
        * in progress, we will missing TCP time state updates?
        */
 
-      (void)devif_timer(&priv->dev, enc_txpoll, ENC_POLLHSEC);
+      (void)devif_timer(&priv->dev, enc_txpoll);
     }
 
   /* Release lock on the SPI bus and uIP */
@@ -2199,7 +2166,7 @@ static void enc_pollworker(FAR void *arg)
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, arg);
+  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -2300,7 +2267,8 @@ static int enc_ifup(struct net_driver_s *dev)
 
       /* Set and activate a timer process */
 
-      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, (uint32_t)priv);
+      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                     (wdparm_t)priv);
 
       /* Mark the interface up and enable the Ethernet interrupt at the
        * controller
@@ -2923,10 +2891,6 @@ int enc_initialize(FAR struct spi_dev_s *spi,
 
       return -EAGAIN;
     }
-
-  /* Configure SPI for the ENCX24J600 */
-
-  enc_configspi(priv->spi);
 
   /* Lock the SPI bus so that we have exclusive access */
 

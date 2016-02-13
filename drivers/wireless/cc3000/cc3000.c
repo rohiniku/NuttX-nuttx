@@ -211,27 +211,23 @@ uint8_t spi_readCommand[] = READ_COMMAND;
  *
  ****************************************************************************/
 
-static int cc3000_devtake(FAR struct cc3000_dev_s *priv)
+static inline void cc3000_devtake(FAR struct cc3000_dev_s *priv)
 {
-  int rv;
-
   /* Take the semaphore (perhaps waiting) */
 
-  while ((rv = sem_wait(&priv->devsem)) != 0)
+  while (sem_wait(&priv->devsem) < 0)
     {
-      /* The only case that an error should occur here is if the wait was awakened
-       * by a signal.
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      DEBUGASSERT(rv == OK || errno == EINTR);
+      DEBUGASSERT(errno == EINTR);
     }
-
-  return rv;
 }
 
-static inline int cc3000_devgive(FAR struct cc3000_dev_s *priv)
+static inline void cc3000_devgive(FAR struct cc3000_dev_s *priv)
 {
-  return sem_post(&priv->devsem);
+  (void)sem_post(&priv->devsem);
 }
 
 /****************************************************************************
@@ -259,7 +255,8 @@ static inline void cc3000_configspi(FAR struct spi_dev_s *spi)
 
   SPI_SETMODE(spi, CONFIG_CC3000_SPI_MODE);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_CC3000_SPI_FREQUENCY);
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_CC3000_SPI_FREQUENCY);
 }
 
 /****************************************************************************
@@ -282,15 +279,9 @@ static inline void cc3000_configspi(FAR struct spi_dev_s *spi)
 
 static void cc3000_lock_and_select(FAR struct spi_dev_s *spi)
 {
-#ifndef CONFIG_SPI_OWNBUS
-  /* Lock the SPI bus because there are multiple devices competing for the
-   * SPI bus
-   */
-
   /* Lock the SPI bus so that we have exclusive access */
 
   (void)SPI_LOCK(spi, true);
-#endif
 
   /* We have the lock.  Now make sure that the SPI bus is configured for the
    * CC3000 (it might have gotten configured for a different device while
@@ -305,9 +296,8 @@ static void cc3000_lock_and_select(FAR struct spi_dev_s *spi)
  * Function: cc3000_unlock
  *
  * Description:
- *   If we are sharing the SPI bus with other devices (CONFIG_SPI_OWNBUS
- *   undefined) then we need to un-lock the SPI bus for each transfer,
- *   possibly losing the current configuration.
+ *   Un-lock the SPI bus after each transfer, possibly losing the current
+ *   configuration if we are sharing the SPI bus with other devices.
  *
  * Parameters:
  *   spi  - Reference to the SPI driver structure
@@ -325,11 +315,9 @@ static void cc3000_deselect_and_unlock(FAR struct spi_dev_s *spi)
 
   SPI_SELECT(spi, SPIDEV_WIRELESS, false);
 
-#ifndef CONFIG_SPI_OWNBUS
   /* Relinquish the SPI bus. */
 
   (void)SPI_LOCK(spi, false);
-#endif
 }
 
 /****************************************************************************
@@ -362,27 +350,16 @@ static int cc3000_wait(FAR struct cc3000_dev_s *priv, sem_t *psem)
   /* Wait on first psem to become signaled */
 
   ret = sem_wait(psem);
-  if (ret >= 0)
-    {
-      /* Yes... then retake the mutual exclusion semaphore */
-
-      ret = cc3000_devtake(priv);
-    }
-
-  sched_unlock();
-
-  /* Was the semaphore wait successful? Did we successful re-take the
-   * mutual exclusion semaphore?
-   */
-
   if (ret < 0)
     {
-      /* No.. One of the two sem_wait's failed. */
-
-      ret = -errno;
+      return -errno;
     }
 
-  return ret;
+  /* Then retake the mutual exclusion semaphore */
+
+  cc3000_devtake(priv);
+  sched_unlock();
+  return OK;
 }
 
 /****************************************************************************
@@ -828,11 +805,7 @@ static int cc3000_open(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = cc3000_devtake(priv);
-  if (ret < 0)
-    {
-      return -ret;
-    }
+  cc3000_devtake(priv);
 
   /* Increment the reference count */
 
@@ -994,9 +967,8 @@ out_with_sem:
 
 static int cc3000_close(FAR struct file *filep)
 {
-  FAR struct inode         *inode;
+  FAR struct inode *inode;
   FAR struct cc3000_dev_s *priv;
-  int                       ret;
 #ifdef CONFIG_CC3000_MT
   int s;
 #endif
@@ -1013,11 +985,7 @@ static int cc3000_close(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = cc3000_devtake(priv);
-  if (ret < 0)
-    {
-      return -EINTR;
-    }
+  cc3000_devtake(priv);
 
   /* Decrement the reference count unless it would decrement a negative
    * value.  When the count decrements to zero, there are no further
@@ -1094,13 +1062,7 @@ static ssize_t cc3000_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = cc3000_devtake(priv);
-
-  if (ret < 0)
-    {
-      nread = -errno;
-      goto errout_without_sem;
-    }
+  cc3000_devtake(priv);
 
   /* Verify that the caller has provided a buffer large enough to receive
    * the maximum data.
@@ -1160,7 +1122,7 @@ static ssize_t cc3000_read(FAR struct file *filep, FAR char *buffer, size_t len)
         {
           /* Yes... then retake the mutual exclusion semaphore */
 
-          ret = cc3000_devtake(priv);
+          cc3000_devtake(priv);
         }
 
       /* Was the semaphore wait successful? Did we successful re-take the
@@ -1247,15 +1209,7 @@ static ssize_t cc3000_write(FAR struct file *filep, FAR const char *usrbuffer, s
 
   /* Get exclusive access to the driver data structure */
 
-  ret = cc3000_devtake(priv);
-  if (ret < 0)
-    {
-      /* This should only happen if the wait was canceled by an signal */
-
-      ndbg("sem_wait: %d\n", errno);
-      nwritten = -errno;
-      goto errout_without_sem;
-    }
+  cc3000_devtake(priv);
 
   /* Figure out the total length of the packet in order to figure out if there is padding or not */
 
@@ -1360,13 +1314,7 @@ static int cc3000_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = cc3000_devtake(priv);
-  if (ret < 0)
-    {
-      /* This should only happen if the wait was canceled by an signal */
-
-      return -errno;
-    }
+  cc3000_devtake(priv);
 
   /* Process the IOCTL by command */
 
@@ -1471,13 +1419,7 @@ static int cc3000_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Are we setting up the poll?  Or tearing it down? */
 
-  ret = cc3000_devtake(priv);
-  if (ret < 0)
-    {
-      /* This should only happen if the wait was canceled by an signal */
-
-      return -errno;
-    }
+  cc3000_devtake(priv);
 
   if (setup)
     {

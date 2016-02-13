@@ -213,10 +213,18 @@ int main(int argc, char **argv, char **envp)
           if (begin)
             {
               path = skip_spaces(next);
+              if (*path == '#')
+                {
+                  /* The reset of the line is comment */
+
+                  puts(path);
+                  break;
+                }
+
               next = strchr(path, ':');
               if (!next)
                 {
-                  fprintf(stderr, "%lu: Expected semicolon\n", g_lineno);
+                  fprintf(stderr, "%lu: Expected colon\n", g_lineno);
                   exit(EXIT_FAILURE);
                 }
 
@@ -294,4 +302,3 @@ int main(int argc, char **argv, char **envp)
 }
 
 #endif /* HOST_CYGWIN */
-

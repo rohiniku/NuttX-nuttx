@@ -78,7 +78,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define E1000_WDDELAY   (1*CLK_TCK)
-#define E1000_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -454,7 +453,8 @@ static int e1000_transmit(struct e1000_dev *e1000)
 
   /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
-  wd_start(e1000->txtimeout, E1000_TXTIMEOUT, e1000_txtimeout, 1, (uint32_t)e1000);
+  wd_start(e1000->txtimeout, E1000_TXTIMEOUT, e1000_txtimeout, 1,
+           (wdparm_t)e1000);
   return OK;
 }
 
@@ -770,11 +770,12 @@ static void e1000_polltimer(int argc, uint32_t arg, ...)
    * we will missing TCP time state updates?
    */
 
-  (void)devif_timer(&e1000->netdev, e1000_txpoll, E1000_POLLHSEC);
+  (void)devif_timer(&e1000->netdev, e1000_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1, arg);
+  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -808,7 +809,8 @@ static int e1000_ifup(struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1, (uint32_t)e1000);
+  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1,
+                 (wdparm_t)e1000);
 
   if (e1000_inl(e1000, E1000_STATUS) & 2)
     {
@@ -1018,18 +1020,12 @@ static irqreturn_t e1000_interrupt_handler(int irq, void *dev_id)
       wd_cancel(e1000->txtimeout);
     }
 
-  /* Check is a packet transmission just completed.  If so, call skel_txdone.
-   * This may disable further Tx interrupts if there are no pending
-   * tansmissions.
-   */
-
   /* Tx-descriptor Written back */
 
   if (intr_cause & (1 << 0))
     {
       devif_poll(&e1000->netdev, e1000_txpoll);
     }
-
 
   /* Rx-Descriptors Low */
 

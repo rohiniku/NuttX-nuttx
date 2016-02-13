@@ -1,4 +1,4 @@
-NuttX TODO List (Last updated January 13, 2016)
+NuttX TODO List (Last updated February 8, 2016)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This file summarizes known NuttX bugs, limitations, inconsistencies with
@@ -14,24 +14,24 @@ nuttx/
   (3)  Signals (sched/signal, arch/)
   (2)  pthreads (sched/pthread)
   (0)  Message Queues (sched/mqueue)
-  (8)  Kernel/Protected Build
-  (4)  C++ Support
+  (6)  Kernel/Protected Build
+  (3)  C++ Support
   (6)  Binary loaders (binfmt/)
- (13)  Network (net/, drivers/net)
+ (12)  Network (net/, drivers/net)
   (4)  USB (drivers/usbdev, drivers/usbhost)
-  (1)  Other drivers (drivers/)
+  (0)  Other drivers (drivers/)
  (11)  Libraries (libc/, libm/)
  (11)  File system/Generic drivers (fs/, drivers/)
   (8)  Graphics subsystem (graphics/)
   (1)  Pascal add-on (pcode/)
   (1)  Build system / Toolchains
   (3)  Linux/Cywgin simulation (arch/sim)
-  (5)  ARM (arch/arm/)
+  (4)  ARM (arch/arm/)
 
 apps/
 
-  (4)  Network Utilities (apps/netutils/)
-  (3)  NuttShell (NSH) (apps/nshlib)
+  (3)  Network Utilities (apps/netutils/)
+  (2)  NuttShell (NSH) (apps/nshlib)
   (1)  System libraries apps/system (apps/system)
   (4)  Other Applications & Tests (apps/examples/)
 
@@ -228,13 +228,9 @@ o Task/Scheduler (sched/)
                hidden behind simple accessor functions and so the internal
                data structures can be changed if need with very little impact.
 
-               The only area are the list structure is not well contained is
-               in the sequence of code that finds the current running task:
 
-                 FAR struct tcb_s *rtcb = (FAT struc tcb_s *)g_readytorun.head;
-
-               That needs to be hidden behind a macro (it would also be a problem
-               for any SMP implementation).
+               Explicity refereence to the list strucutre are hidden behnid
+               the macro this_task().
 
   Status:      Open
   Priority:    Low.  Things are just the way that we want them for the way
@@ -463,14 +459,6 @@ o Kernel/Protected Build
   Priority:    Medium/High -- the kernel build configuration is not fully fielded
                yet.
 
-  Title:       NSH free COMMAND LIMITATION
-  Description: The NSH 'free' command only shows memory usage in the user
-               heap only, not usage in the kernel heap.  I am thinking that
-               kernel heap memory usage should be available in /proc/memory.
-               Better /proc/kmm
-  Status:      Open
-  Priority:    Medium/High
-
   Title:       NxTERM PARTITIONING.
   Description: NxTerm is implemented (correctly) as a driver that resides
                in the nuttx/ directory.  However, the user interfaces must be
@@ -480,16 +468,6 @@ o Kernel/Protected Build
   Status:      Open
   Priority:    Medium
 
-  Title:       I2C TOOL PATITIONING
-  Description: The tool at apps/system/i2c makes direct calls into MCU level
-               I2C logic within the OS and, hence, violates the OS/application
-               interface.  An I2C character driver will need to be developed
-               to perform the I2C interactions within the OS; the I2C tools
-               will need to be modified to use that driver to perform the
-               I2C accesses.
-  Status:      Open
-  Priority:    Medium.  Until this change is made, the I2C tool will not be
-               availabel in protected or kernel builds.
   Title:       C++ CONSTRUCTORS HAVE TOO MANY PRIVILEGES (PROTECTED MODE)
   Description: When a C++ ELF module is loaded, its C++ constructors are called
                via sched/task_starthook.c logic.  This logic runs in protected mode.
@@ -599,20 +577,6 @@ o C++ Support
                of type unsigned int.  But this is pretty ugly!  A better solution
                would be to get a hold of the compilers definition of size_t.
   Priority:    Low.
-
-  Title:       STATIC CONSTRUCTORS
-  Description: Need to call static constructors
-               Update:  Static constructors are implemented for the STM32 F4 and
-               this will provide the model for all solutions.  Basically, if
-               CONFIG_HAVE_CXXINITIALIZE=y is defined in the configuration, then
-               board-specific code must provide the interface up_cxxinitialize().
-               up_cxxinitialize() is called from application logic to initialize
-               all static class instances.  This TODO item probably has to stay
-               open because this solution is only available on STM32 F4.
-  Status:      Open
-  Priority:    Low, depends on toolchain.  Call to gcc's built-in static
-               constructor logic will probably have to be performed by
-               user logic in the application.
 
   Title:       STATIC CONSTRUCTORS AND MULTITASKING
   Description: The logic that calls static constructors operates on the main
@@ -1007,36 +971,6 @@ o Network (net/, drivers/net)
   Status:      Open
   Priority:    Low.  I don't know of any issues now, but I am sure that
                someone will encounter this in the future.
-
-  Title:       GLOBAL DNS ADDRESS
-  Description: Currently there is a single, global DNS server address.  This
-               address resides in user space (owned by libc/netdb) but is
-               accessed by network code in kernel space (net/procfs).  This
-               works in a FLAT build, not not in other build modules.
-
-               Things would be really weird in the kernel build:  There
-               would be a separate name server address and a separate netdb
-               DNS client in each process.  That can't be right.
-
-               The Linux kernel has no knowledge at all about DNS addresses.
-               DNS addresses are retained in /etc/resolv.conf in records
-               ike:
-
-                 nameserver <nameserver IP addresses>
-
-               The nameserver is associated with the device only through
-               the routing of the IP address.  And this is how there can
-               be multiple, global DNS addresses.
-
-               Conclusion: The logic in net/procfs needs to be re-designed
-               so that it does not use the DNS address.  The DNS address(es)
-               should to applied to the device status by logic in the
-               implementation of the NSH ifconfig command.  This would be,
-               unfortunately, a significant re-design since the formatting
-               is currently performed in net/procfs.
-  Status:      Open
-  Priority:    Low.  I doubt that there are any multiple NIC, multiple DNS
-               server configurations
 
   Title:       MISSING netdb INTERFACES
   Description: There is no implementation for many netdb interfaces such as
@@ -1638,25 +1572,6 @@ o Build system
 o Other drivers (drivers/)
   ^^^^^^^^^^^^^^^^^^^^^^^^
 
-  Title:       I2C NOT THREAD SAFE
-  Description: Unlike the SPI interface, the I2C interface has no method to lock
-               the interface.  This is a problem for all non-atomic I2C operations
-               in a multi-tasking I2C environment:
-               - I2C_SETFREQUENCY:  Frequency setting can be overwritten by other
-                 I2C usage.
-               - I2C_SETADDRESS used with I2C_READ, I2C_WRITE, and I2C_WRITEREAD:
-                 Similarly, address can and will be changed by other I2C usage.
-               - I2C_TRANSFER:  This is the only interface that is properly self
-                 contained and protected from most mult-tasking issues.  But even
-                 this interface can suffer if there are differing frequency settings.
-  Status:      Open
-  Priority:    Medium-High.  The fix is easy but effects a lot of software.  There
-               are two ways to fix theses problems:  (1) Add a locking method such
-               as is provided with the SPI interface, or (2) make each interface
-               self-contained and atomic:  Remove the I2C_FREQUENCY and I2C_ADDRESS
-               methods; Add frequency to all interfaces and add the address to
-               I2C_READ, I2C_WRITE, and I2C_WRITEREAD.
-
 o Linux/Cywgin simulation (arch/sim)
   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1760,31 +1675,6 @@ o ARM (arch/arm/)
                If your design needs continuous interrupts like this, please try
                the above change and, please, submit a patch with the working fix.
 
-  Title:       STACK ALIGNMENT IN INTERRUPT HANDLERS
-  Description: The EABI standard requires that the stack always have a 32-byte
-               alignment.  There is no guarantee at present that the stack will be
-               so aligned in an interrupt handler.  Therefore, I would expect some
-               issues if, for example, floating point or perhaps long long operations
-               were performed in an interrupt handler.
-
-               This issue exists for ARM7, ARM9, and Cortex-M0 but has been
-               addressed for the Cortex-M3/4/7 and Cortex-A5/8.  The fix
-               is really simple but cannot be incorporated without some
-               substantial testing.  For ARM, the fix is the following logic
-               arround each call into C code from assembly:
-
-                 mov  r4, sp     /* Save the SP in a preserved register */
-                 bic  sp, sp, #7 /* Force 8-byte alignment */
-                 bl   cfunction  /* Call the C function */
-                 mov  sp, r4     /* Restore the possibly unaligned stack pointer */
-
-               This same issue applies to the interrupt stack which is, I think
-               improperly aligned in almost all cases (except Cortex-A5).
-
-  Status:      Open
-  Priority:    Low for me because I never do floating point operations in
-               interrupt handlers.
-
   Title:       IMPROVED TASK START-UP AND SYSCALL RETURN
   Description: Couldn't up_start_task and up_start_pthread syscalls be
                eliminated.  Wouldn't this work to get us from kernel-
@@ -1824,18 +1714,6 @@ o Network Utilities (apps/netutils/)
   Status:      Open.  An annoyance, but not a real problem.
   Priority:    Low
 
-  Title:       DHCPD ACCESSES KERNEL PRIVATE INTERFACE
-  Description: arp_update() is referenced outside of nuttx/net.  It is used in
-               in the netutils/ DHCPD logic to set entries in the ARP table.
-               That is violation of the separation of kernel and OS
-               functionality.  As a consequence, dhcpd will not work with the
-               NuttX kernel built.
-
-               This direct OS call needs to be replaced with a network ioctl()
-               call.
-  Status:      Open
-  Priority:    Medium.  Important for full functionality with kernel build.
-
   Title:       NETWORK MONITOR NOT GENERALLY AVAILABLE
   Description: The NSH network management logic has general applicability
                but is currently useful only because it is embedded in the NSH
@@ -1854,12 +1732,6 @@ o NuttShell (NSH) (apps/nshlib)
                still show status for all interfaces.
   Status:      Open
   Priority:    Low
-
-  Title:       ARP COMMAND
-  Description: Add an ARP command so that we can see and modify the contents of
-               the ARP table.
-  Status:      Open
-  Priority:    Low (enhancement)
 
   Title:       ARPPING COMMAND
   Description: Add an arping command

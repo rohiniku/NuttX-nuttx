@@ -5,6 +5,9 @@
  *   Copyright (C) 2015 Alan Carvalho de Assis. All rights reserved.
  *   Author: Alan Carvalho de Assis <acassis@gmail.com>
  *
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -53,7 +56,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/power/battery_charger.h>
 #include <nuttx/power/battery_ioctl.h>
 #include "bq2425x.h"
@@ -93,13 +96,13 @@ struct bq2425x_dev_s
   /* The common part of the battery driver visible to the upper-half driver */
 
   FAR const struct battery_charger_operations_s *ops; /* Battery operations */
-  sem_t batsem;              /* Enforce mutually exclusive access */
+  sem_t batsem;                /* Enforce mutually exclusive access */
 
   /* Data fields specific to the lower half BQ2425x driver follow */
 
-  FAR struct i2c_dev_s *i2c; /* I2C interface */
-  uint8_t addr;              /* I2C address */
-  uint32_t frequency;        /* I2C frequency */
+  FAR struct i2c_master_s *i2c; /* I2C interface */
+  uint8_t addr;                 /* I2C address */
+  uint32_t frequency;           /* I2C frequency */
 };
 
 /****************************************************************************
@@ -158,28 +161,31 @@ static const struct battery_charger_operations_s g_bq2425xops =
 static int bq2425x_getreg8(FAR struct bq2425x_dev_s *priv, uint8_t regaddr,
                            FAR uint8_t *regval)
 {
+  struct i2c_config_s config;
   uint8_t val;
   int ret;
 
-  /* Set the I2C address and address size */
+  /* Set up the I2C configuration */
 
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
+  config.frequency = priv->frequency;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
 
   /* Write the register address */
 
-  ret = I2C_WRITE(priv->i2c, &regaddr, 1);
+  ret = i2c_write(priv->i2c, &config, &regaddr, 1);
   if (ret < 0)
     {
-      batdbg("I2C_WRITE failed: %d\n", ret);
+      batdbg("i2c_write failed: %d\n", ret);
       return ret;
     }
 
   /* Restart and read 8-bits from the register */
 
-  ret = I2C_READ(priv->i2c, &val, 1);
+  ret = i2c_read(priv->i2c, &config, &val, 1);
   if (ret < 0)
     {
-      batdbg("I2C_READ failed: %d\n", ret);
+      batdbg("i2c_read failed: %d\n", ret);
       return ret;
     }
 
@@ -202,7 +208,14 @@ static int bq2425x_getreg8(FAR struct bq2425x_dev_s *priv, uint8_t regaddr,
 static int bq2425x_putreg8(FAR struct bq2425x_dev_s *priv, uint8_t regaddr,
                            uint8_t regval)
 {
+  struct i2c_config_s config;
   uint8_t buffer[2];
+
+  /* Set up the I2C configuration */
+
+  config.frequency = priv->frequency;
+  config.address   = priv->addr;
+  config.addrlen   = 7;
 
   batdbg("addr: %02x regval: %08x\n", regaddr, regval);
 
@@ -211,13 +224,9 @@ static int bq2425x_putreg8(FAR struct bq2425x_dev_s *priv, uint8_t regaddr,
   buffer[0] = regaddr;
   buffer[1] = regval;
 
-  /* Set the I2C address and address size */
-
-  I2C_SETADDRESS(priv->i2c, priv->addr, 7);
-
   /* Write the register address followed by the data (no RESTART) */
 
-  return I2C_WRITE(priv->i2c, buffer, 2);
+  return i2c_write(priv->i2c, &config, buffer, 2);
 }
 
 /****************************************************************************
@@ -715,8 +724,9 @@ static int bq2425x_current(struct battery_charger_dev_s *dev, int value)
  *
  ****************************************************************************/
 
-FAR struct battery_charger_dev_s *bq2425x_initialize(FAR struct i2c_dev_s *i2c,
-                            uint8_t addr, uint32_t frequency)
+FAR struct battery_charger_dev_s *
+  bq2425x_initialize(FAR struct i2c_master_s *i2c, uint8_t addr,
+                     uint32_t frequency)
 {
   FAR struct bq2425x_dev_s *priv;
   int ret;
@@ -733,10 +743,6 @@ FAR struct battery_charger_dev_s *bq2425x_initialize(FAR struct i2c_dev_s *i2c,
       priv->i2c       = i2c;
       priv->addr      = addr;
       priv->frequency = frequency;
-
-      /* Set the I2C frequency (ignoring the returned, actual frequency) */
-
-      (void)I2C_SETFREQUENCY(i2c, priv->frequency);
 
       /* Reset the BQ2425x */
 

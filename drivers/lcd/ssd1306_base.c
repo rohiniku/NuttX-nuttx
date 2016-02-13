@@ -129,7 +129,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/lcd/lcd.h>
 #include <nuttx/lcd/ssd1306.h>
@@ -807,7 +807,7 @@ static int ssd1306_setcontrast(struct lcd_dev_s *dev, unsigned int contrast)
 #ifdef CONFIG_LCD_SSD1306_SPI
 FAR struct lcd_dev_s *ssd1306_initialize(FAR struct spi_dev_s *dev, unsigned int devno)
 #else
-FAR struct lcd_dev_s *ssd1306_initialize(FAR struct i2c_dev_s *dev, unsigned int devno)
+FAR struct lcd_dev_s *ssd1306_initialize(FAR struct i2c_master_s *dev, unsigned int devno)
 #endif
 {
   FAR struct ssd1306_dev_s  *priv = &g_oleddev;
@@ -818,36 +818,15 @@ FAR struct lcd_dev_s *ssd1306_initialize(FAR struct i2c_dev_s *dev, unsigned int
 #ifdef CONFIG_LCD_SSD1306_SPI
   priv->spi = dev;
 
-  /* If this SPI bus is not shared, then we can config it now.
-   * If it is shared, then other device could change our config,
-   * then just configure before sending data.
-   */
+  /* Configure the SPI */
 
-#  ifdef CONFIG_SPI_OWNBUS
-    /* Configure SPI */
-
-    SPI_SETMODE(priv->spi, CONFIG_SSD1306_SPIMODE);
-    SPI_SETBITS(priv->spi, 8);
-    SPI_SETFREQUENCY(priv->spi, CONFIG_SSD1306_FREQUENCY);
-#  else
-    /* Configure the SPI */
-
-    ssd1306_configspi(priv->spi);
-#  endif
+  ssd1306_configspi(priv->spi);
 
 #else
   /* Remember the I2C configuration */
 
   priv->i2c  = dev;
   priv->addr = CONFIG_SSD1306_I2CADDR;
-
-  /* Set the I2C address and frequency.  REVISIT:  This logic would be
-   * insufficient if we share the I2C bus with any other devices that also
-   * modify the address and frequency.
-   */
-
-  I2C_SETADDRESS(priv->i2c, CONFIG_SSD1306_I2CADDR, 7);
-  I2C_SETFREQUENCY(priv->i2c, CONFIG_SSD1306_I2CFREQ);
 #endif
 
   /* Lock and select device */

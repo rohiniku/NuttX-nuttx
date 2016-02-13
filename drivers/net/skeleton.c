@@ -86,7 +86,6 @@
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define skeleton_WDDELAY   (1*CLK_TCK)
-#define skeleton_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -458,13 +457,26 @@ static void skel_txdone(FAR struct skel_driver_s *priv)
 
   NETDEV_TXDONE(priv->sk_dev);
 
-  /* If no further xmits are pending, then cancel the TX timeout and
+  /* Check if there are pending transmissions */
+
+  /* If no further transmissions are pending, then cancel the TX timeout and
    * disable further Tx interrupts.
    */
 
   wd_cancel(priv->sk_txtimeout);
 
-  /* Then poll the network for new XMIT data */
+  /* Then make sure that the TX poll timer is running (if it is already
+   * running, the following would restart it).  This is necessary to
+   * avoid certain race conditions where the polling sequence can be
+   * interrupted.
+   */
+
+  (void)wd_start(priv->sk_txpoll, skeleton_WDDELAY, skel_poll_expiry, 1,
+                 (wdparm_t)priv);
+
+  /* And disable further TX interrupts. */
+
+  /* In any event, poll the network for new TX data */
 
   (void)devif_poll(&priv->sk_dev, skel_txpoll);
 }
@@ -733,7 +745,7 @@ static inline void skel_poll_process(FAR struct skel_driver_s *priv)
    * progress, we will missing TCP time state updates?
    */
 
-  (void)devif_timer(&priv->sk_dev, skel_txpoll, skeleton_POLLHSEC);
+  (void)devif_timer(&priv->sk_dev, skel_txpoll);
 
   /* Setup the watchdog poll timer again */
 

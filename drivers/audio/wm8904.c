@@ -62,7 +62,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/clock.h>
 #include <nuttx/wqueue.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/audio/i2s.h>
@@ -266,17 +266,19 @@ uint16_t wm8904_readreg(FAR struct wm8904_dev_s *priv, uint8_t regaddr)
 
       /* Set up to write the address */
 
-      msg[0].addr   = priv->lower->address;
-      msg[0].flags  = 0;
-      msg[0].buffer = &regaddr;
-      msg[0].length = 1;
+      msg[0].frequency = priv->lower->frequency;
+      msg[0].addr      = priv->lower->address;
+      msg[0].flags     = 0;
+      msg[0].buffer    = &regaddr;
+      msg[0].length    = 1;
 
       /* Followed by the read data */
 
-      msg[1].addr   = priv->lower->address;
-      msg[1].flags  = I2C_M_READ;
-      msg[1].buffer = data;
-      msg[1].length = 2;
+      msg[1].frequency = priv->lower->frequency;
+      msg[1].addr      = priv->lower->address;
+      msg[1].flags     = I2C_M_READ;
+      msg[1].buffer    = data;
+      msg[1].length    = 2;
 
       /* Read the register data.  The returned value is the number messages
        * completed.
@@ -290,10 +292,10 @@ uint16_t wm8904_readreg(FAR struct wm8904_dev_s *priv, uint8_t regaddr)
 
           auddbg("WARNING: I2C_TRANSFER failed: %d ... Resetting\n", ret);
 
-          ret = up_i2creset(priv->i2c);
+          ret = I2C_RESET(priv->i2c);
           if (ret < 0)
             {
-              auddbg("ERROR: up_i2creset failed: %d\n", ret);
+              auddbg("ERROR: I2C_RESET failed: %d\n", ret);
               break;
             }
 #else
@@ -332,7 +334,14 @@ uint16_t wm8904_readreg(FAR struct wm8904_dev_s *priv, uint8_t regaddr)
 static void wm8904_writereg(FAR struct wm8904_dev_s *priv, uint8_t regaddr,
                             uint16_t regval)
 {
+  struct i2c_config_s config;
   int retries;
+
+  /* Setup up the I2C configuration */
+
+  config.frequency = priv->lower->frequency;
+  config.address   = priv->lower->address;
+  config.addrlen   = 7;
 
   /* Try up to three times to read the register */
 
@@ -351,18 +360,18 @@ static void wm8904_writereg(FAR struct wm8904_dev_s *priv, uint8_t regaddr,
        * completed.
        */
 
-      ret = I2C_WRITE(priv->i2c, data, 3);
+      ret = i2c_write(priv->i2c, &config, data, 3);
       if (ret < 0)
         {
 #ifdef CONFIG_I2C_RESET
           /* Perhaps the I2C bus is locked up?  Try to shake the bus free */
 
-          auddbg("WARNING: I2C_TRANSFER failed: %d ... Resetting\n", ret);
+          auddbg("WARNING: i2c_write failed: %d ... Resetting\n", ret);
 
-          ret = up_i2creset(priv->i2c);
+          ret = I2C_RESET(priv->i2c);
           if (ret < 0)
             {
-              auddbg("ERROR: up_i2creset failed: %d\n", ret);
+              auddbg("ERROR: I2C_RESET failed: %d\n", ret);
               break;
             }
 #else
@@ -2464,7 +2473,7 @@ static void wm8904_hw_reset(FAR struct wm8904_dev_s *priv)
  ****************************************************************************/
 
 FAR struct audio_lowerhalf_s *
-  wm8904_initialize(FAR struct i2c_dev_s *i2c, FAR struct i2s_dev_s *i2s,
+  wm8904_initialize(FAR struct i2c_master_s *i2c, FAR struct i2s_dev_s *i2s,
                     FAR const struct wm8904_lower_s *lower)
 {
   FAR struct wm8904_dev_s *priv;
@@ -2491,12 +2500,6 @@ FAR struct audio_lowerhalf_s *
       sem_init(&priv->pendsem, 0, 1);
       dq_init(&priv->pendq);
       dq_init(&priv->doneq);
-
-      /* Initialize I2C */
-
-      auddbg("address=%02x frequency=%d\n", lower->address, lower->frequency);
-      I2C_SETFREQUENCY(i2c, lower->frequency);
-      I2C_SETADDRESS(i2c, lower->address, 7);
 
       /* Software reset.  This puts all WM8904 registers back in their
        * default state.

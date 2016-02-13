@@ -1,7 +1,7 @@
 /********************************************************************************
  * include/nuttx/sched.h
  *
- *   Copyright (C) 2007-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,7 @@
 #include <mqueue.h>
 #include <time.h>
 
+#include <nuttx/clock.h>
 #include <nuttx/irq.h>
 #include <nuttx/wdog.h>
 #include <nuttx/mm/shm.h>
@@ -125,8 +126,8 @@
 /* Task Management Definitions **************************************************/
 /* Special task IDS.  Any negative PID is invalid. */
 
-#define NULL_TASK_PROCESS_ID      (pid_t)0
-#define INVALID_PROCESS_ID        (pid_t)-1
+#define NULL_TASK_PROCESS_ID       (pid_t)0
+#define INVALID_PROCESS_ID         (pid_t)-1
 
 /* This is the maximum number of times that a lock can be set */
 
@@ -136,9 +137,9 @@
 
 #define TCB_FLAG_TTYPE_SHIFT       (0)      /* Bits 0-1: thread type */
 #define TCB_FLAG_TTYPE_MASK        (3 << TCB_FLAG_TTYPE_SHIFT)
-#  define TCB_FLAG_TTYPE_TASK      (0 << TCB_FLAG_TTYPE_SHIFT) /* Normal user task */
-#  define TCB_FLAG_TTYPE_PTHREAD   (1 << TCB_FLAG_TTYPE_SHIFT) /* User pthread */
-#  define TCB_FLAG_TTYPE_KERNEL    (2 << TCB_FLAG_TTYPE_SHIFT) /* Kernel thread */
+#  define TCB_FLAG_TTYPE_TASK      (0 << TCB_FLAG_TTYPE_SHIFT)  /* Normal user task */
+#  define TCB_FLAG_TTYPE_PTHREAD   (1 << TCB_FLAG_TTYPE_SHIFT)  /* User pthread */
+#  define TCB_FLAG_TTYPE_KERNEL    (2 << TCB_FLAG_TTYPE_SHIFT)  /* Kernel thread */
 #define TCB_FLAG_NONCANCELABLE     (1 << 2) /* Bit 2: Pthread is non-cancelable */
 #define TCB_FLAG_CANCEL_PENDING    (1 << 3) /* Bit 3: Pthread cancel is pending */
 #define TCB_FLAG_POLICY_SHIFT      (4) /* Bit 4-5: Scheduling policy */
@@ -147,7 +148,9 @@
 #  define TCB_FLAG_SCHED_RR        (1 << TCB_FLAG_POLICY_SHIFT) /* Round robin scheding policy */
 #  define TCB_FLAG_SCHED_SPORADIC  (2 << TCB_FLAG_POLICY_SHIFT) /* Sporadic scheding policy */
 #  define TCB_FLAG_SCHED_OTHER     (3 << TCB_FLAG_POLICY_SHIFT) /* Other scheding policy */
-#define TCB_FLAG_EXIT_PROCESSING   (1 << 6) /* Bit 6: Exitting */
+#define TCB_FLAG_CPU_ASSIGNED      (1 << 6) /* Bit 6: Assigned to a CPU */
+#define TCB_FLAG_EXIT_PROCESSING   (1 << 7) /* Bit 7: Exitting */
+                                            /* Bits 8-15: Available */
 
 /* Values for struct task_group tg_flags */
 
@@ -155,6 +158,7 @@
 #define GROUP_FLAG_ADDRENV         (1 << 1) /* Bit 1: Group has an address environment */
 #define GROUP_FLAG_PRIVILEGED      (1 << 2) /* Bit 2: Group is privileged */
 #define GROUP_FLAG_DELETED         (1 << 3) /* Bit 3: Group has been deleted but not yet freed */
+                                            /* Bits 4-7: Available */
 
 /* Values for struct child_status_s ch_flags */
 
@@ -164,12 +168,14 @@
 #  define CHILD_FLAG_TTYPE_PTHREAD (1 << CHILD_FLAG_TTYPE_SHIFT) /* User pthread */
 #  define CHILD_FLAG_TTYPE_KERNEL  (2 << CHILD_FLAG_TTYPE_SHIFT) /* Kernel thread */
 #define CHILD_FLAG_EXITED          (1 << 0) /* Bit 2: The child thread has exit'ed */
+                                            /* Bits 3-7: Available */
 
 /* Sporadic scheduler flags */
 
-#define SPORADIC_FLAG_ALLOCED     (1 << 0)  /* Bit 0: Timer is allocated */
-#define SPORADIC_FLAG_MAIN        (1 << 1)  /* Bit 1: The main timer */
-#define SPORADIC_FLAG_REPLENISH   (1 << 2)  /* Bit 2: Replenishment cycle */
+#define SPORADIC_FLAG_ALLOCED      (1 << 0)  /* Bit 0: Timer is allocated */
+#define SPORADIC_FLAG_MAIN         (1 << 1)  /* Bit 1: The main timer */
+#define SPORADIC_FLAG_REPLENISH    (1 << 2)  /* Bit 2: Replenishment cycle */
+                                             /* Bits 3-7: Available */
 
 /********************************************************************************
  * Public Type Definitions
@@ -189,6 +195,9 @@ enum tstate_e
   TSTATE_TASK_INVALID    = 0, /* INVALID      - The TCB is uninitialized */
   TSTATE_TASK_PENDING,        /* READY_TO_RUN - Pending preemption unlock */
   TSTATE_TASK_READYTORUN,     /* READY-TO-RUN - But not running */
+#ifdef CONFIG_SMP
+  TSTATE_TASK_ASSIGNED,       /* READY-TO-RUN - Not running, but assigned to a CPU */
+#endif
   TSTATE_TASK_RUNNING,        /* READY_TO_RUN - And running */
 
   TSTATE_TASK_INACTIVE,       /* BLOCKED      - Initialized but not yet activated */
@@ -209,10 +218,10 @@ typedef enum tstate_e tstate_t;
 
 /* The following definitions are determined by tstate_t */
 
-#define FIRST_READY_TO_RUN_STATE TSTATE_TASK_READYTORUN
-#define LAST_READY_TO_RUN_STATE  TSTATE_TASK_RUNNING
-#define FIRST_BLOCKED_STATE      TSTATE_TASK_INACTIVE
-#define LAST_BLOCKED_STATE       (NUM_TASK_STATES-1)
+#define FIRST_READY_TO_RUN_STATE   TSTATE_TASK_READYTORUN
+#define LAST_READY_TO_RUN_STATE    TSTATE_TASK_RUNNING
+#define FIRST_BLOCKED_STATE        TSTATE_TASK_INACTIVE
+#define LAST_BLOCKED_STATE         (NUM_TASK_STATES-1)
 
 /* The following is the form of a thread start-up function */
 
@@ -273,14 +282,14 @@ struct replenishment_s
 
 struct sporadic_s
 {
-  bool     suspended;               /* Thread is currently suspended            */
-  uint8_t  hi_priority;             /* Sporadic high priority                   */
-  uint8_t  low_priority;            /* Sporadic low priority                    */
-  uint8_t  max_repl;                /* Maximum number of replenishments         */
-  uint8_t  nrepls;                  /* Number of active replenishments          */
-  uint32_t repl_period;             /* Sporadic replenishment period            */
-  uint32_t budget;                  /* Sporadic execution budget period         */
-  uint32_t eventtime;               /* Time thread suspended or [re-]started    */
+  bool      suspended;              /* Thread is currently suspended            */
+  uint8_t   hi_priority;            /* Sporadic high priority                   */
+  uint8_t   low_priority;           /* Sporadic low priority                    */
+  uint8_t   max_repl;               /* Maximum number of replenishments         */
+  uint8_t   nrepls;                 /* Number of active replenishments          */
+  uint32_t  repl_period;            /* Sporadic replenishment period            */
+  uint32_t  budget;                 /* Sporadic execution budget period         */
+  systime_t eventtime;              /* Time thread suspended or [re-]started    */
 
   /* This is the last interval timer activated */
 
@@ -546,6 +555,9 @@ struct tcb_s
 #endif
 
   uint8_t  task_state;                   /* Current state of the thread         */
+#ifdef CONFIG_SMP
+  uint8_t  cpu;                          /* CPU index if running or assigned    */
+#endif
   uint16_t flags;                        /* Misc. general status flags          */
   int16_t  lockcount;                    /* 0=preemptable (not-locked)          */
 
